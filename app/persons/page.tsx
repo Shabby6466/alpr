@@ -6,14 +6,23 @@ import Modal from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { Person } from '@/types'
-import { Plus, Pencil, Trash2, Users, Clock, Car, User, Camera } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, Clock, Car, User, Camera, Search } from 'lucide-react'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
+const inputStyle = {
+  background: '#07101e',
+  border: '1px solid #1e3358',
+  borderRadius: 8,
+  padding: '8px 12px',
+  color: '#e2e8f0',
+  fontSize: '0.875rem',
+  outline: 'none',
+  width: '100%',
+}
+
 function PersonForm({ initial, onSave, onCancel }: {
-  initial?: Partial<Person>
-  onSave: (data: any) => void
-  onCancel: () => void
+  initial?: Partial<Person>; onSave: (data: any) => void; onCancel: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [plates, setPlates] = useState((initial?.plateNumbers ?? ['']).join('\n'))
@@ -25,33 +34,34 @@ function PersonForm({ initial, onSave, onCancel }: {
     onSave({ name: name.trim(), plateNumbers, notes: notes.trim() || undefined })
   }
 
+  const labelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase' as const }
+
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-        <input value={name} onChange={e => setName(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="John Doe" />
+        <label style={labelStyle}>Full Name *</label>
+        <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="John Doe" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">License Plates * <span className="text-slate-400 font-normal">(one per line)</span></label>
+        <label style={labelStyle}>License Plates * <span style={{ color: '#334155', fontWeight: 400, textTransform: 'none' }}>(one per line)</span></label>
         <textarea value={plates} onChange={e => setPlates(e.target.value)} rows={3}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-          placeholder={"MH20EE7602\nDL1CAB0001"} />
+          style={{ ...inputStyle, fontFamily: 'Courier New, monospace', resize: 'vertical' }}
+          placeholder={'MH20EE7602\nDL1CAB0001'} />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+        <label style={labelStyle}>Notes</label>
         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Optional notes…" />
+          style={{ ...inputStyle, resize: 'vertical' }} placeholder="Optional notes…" />
       </div>
       <div className="flex gap-3 pt-2">
         <button onClick={submit}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
-          {initial?.id ? 'Update Person' : 'Add Person'}
+          className="flex-1 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
+          style={{ background: '#2563eb' }}>
+          {initial?.id ? 'Update Person' : 'Register Person'}
         </button>
         <button onClick={onCancel}
-          className="px-4 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+          className="px-4 rounded-lg text-sm transition-colors"
+          style={{ background: '#0c1528', border: '1px solid #1a2744', color: '#64748b' }}>
           Cancel
         </button>
       </div>
@@ -63,43 +73,54 @@ function PersonCard({ person, onEdit, onDelete, onView, onEnrollFace }: {
   person: Person; onEdit: () => void; onDelete: () => void; onView: () => void; onEnrollFace: () => void
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-colors">
-      <div className="flex items-start gap-4 mb-3">
-        <div className="w-16 h-16 rounded-xl bg-slate-100 flex-shrink-0 border border-slate-200 overflow-hidden flex items-center justify-center relative group cursor-pointer" onClick={onEnrollFace}>
+    <div className="rounded-xl p-5 transition-all group"
+      style={{ background: '#0c1528', border: '1px solid #1a2744' }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = '#1e3a5f')}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = '#1a2744')}>
+      <div className="flex items-start gap-4 mb-4">
+        <div className="w-16 h-16 rounded-xl flex-shrink-0 overflow-hidden flex items-center justify-center relative cursor-pointer"
+          style={{ background: '#070e1c', border: '1px solid #1a2744' }}
+          onClick={onEnrollFace}>
           {(person as any).faceThumbnail ? (
-            <img src={`data:image/jpeg;base64,${(person as any).faceThumbnail}`} alt={person.name} className="w-full h-full object-cover" />
+            <img src={`data:image/jpeg;base64,${(person as any).faceThumbnail}`} alt={person.name}
+              className="w-full h-full object-cover" />
           ) : (
-            <User className="text-slate-300" size={24} />
+            <User size={22} style={{ color: '#1e3358' }} />
           )}
-          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-            <Camera className="text-white" size={16} />
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+            style={{ background: 'rgba(37,99,235,0.7)' }}>
+            <Camera size={16} className="text-white" />
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between">
-            <h3 className="font-semibold text-slate-800 truncate">{person.name}</h3>
-            <div className="flex gap-1">
-              <button onClick={onEdit} className="p-1.5 text-slate-400 hover:text-blue-500 rounded hover:bg-blue-50 transition-colors">
-                <Pencil size={14} />
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-bold text-slate-100 truncate">{person.name}</h3>
+            <div className="flex gap-0.5 flex-shrink-0">
+              <button onClick={onEdit}
+                className="p-1.5 rounded-lg transition-colors text-slate-600 hover:text-blue-400 hover:bg-blue-950/40">
+                <Pencil size={13} />
               </button>
-              <button onClick={onDelete} className="p-1.5 text-slate-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors">
-                <Trash2 size={14} />
+              <button onClick={onDelete}
+                className="p-1.5 rounded-lg transition-colors text-slate-600 hover:text-red-400 hover:bg-red-950/30">
+                <Trash2 size={13} />
               </button>
             </div>
           </div>
-          {person.notes && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{person.notes}</p>}
+          {person.notes && <p className="text-xs text-slate-600 mt-1 line-clamp-2">{person.notes}</p>}
         </div>
       </div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
+
+      <div className="flex flex-wrap gap-1.5 mb-4">
         {person.plateNumbers.map(p => <span key={p} className="plate-badge text-xs">{p}</span>)}
       </div>
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400 flex items-center gap-1">
-          <Clock size={11} />
-          Added {new Date(person.createdAt).toLocaleDateString()}
+
+      <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid #0f1e38' }}>
+        <p className="text-xs flex items-center gap-1" style={{ color: '#1e3358' }}>
+          <Clock size={10} />
+          {new Date(person.createdAt).toLocaleDateString()}
         </p>
         <button onClick={onView}
-          className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+          className="text-xs font-semibold flex items-center gap-1.5 transition-colors text-slate-600 hover:text-blue-400">
           <Car size={12} />View history
         </button>
       </div>
@@ -114,7 +135,6 @@ export default function PersonsPage() {
   const [editPerson, setEditPerson] = useState<Person | null>(null)
   const [viewPerson, setViewPerson] = useState<any | null>(null)
   const [search, setSearch] = useState('')
-  const fileInputRef = useState<any>(null)
   const [enrollId, setEnrollId] = useState<string | null>(null)
 
   const handleEnroll = (id: string) => {
@@ -142,27 +162,20 @@ export default function PersonsPage() {
   )
 
   const create = async (data: any) => {
-    try {
-      await api.createPerson(data)
-      toast('Person registered', 'success')
-      mutate(); setAddOpen(false)
-    } catch (e: any) { toast(e.message, 'error') }
+    try { await api.createPerson(data); toast('Person registered', 'success'); mutate(); setAddOpen(false) }
+    catch (e: any) { toast(e.message, 'error') }
   }
 
   const update = async (data: any) => {
     if (!editPerson) return
-    try {
-      await api.updatePerson(editPerson.id, data)
-      toast('Person updated', 'success')
-      mutate(); setEditPerson(null)
-    } catch (e: any) { toast(e.message, 'error') }
+    try { await api.updatePerson(editPerson.id, data); toast('Person updated', 'success'); mutate(); setEditPerson(null) }
+    catch (e: any) { toast(e.message, 'error') }
   }
 
   const remove = async (id: string) => {
     if (!confirm('Delete this person?')) return
-    try {
-      await api.deletePerson(id); toast('Deleted', 'info'); mutate()
-    } catch (e: any) { toast(e.message, 'error') }
+    try { await api.deletePerson(id); toast('Deleted', 'info'); mutate() }
+    catch (e: any) { toast(e.message, 'error') }
   }
 
   const viewHistory = async (person: Person) => {
@@ -175,24 +188,29 @@ export default function PersonsPage() {
       <TopBar title="Persons" subtitle={`${persons.length} registered`} connected={false} />
       <main className="flex-1 p-6 space-y-5">
         <div className="flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
-            <Users size={15} className="text-slate-400" />
+          <div className="flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5"
+            style={{ background: '#0c1528', border: '1px solid #1a2744' }}>
+            <Search size={14} className="text-slate-600" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by name or plate…"
-              className="text-sm outline-none flex-1 placeholder:text-slate-400" />
+              className="text-sm outline-none flex-1 bg-transparent text-slate-200 placeholder-slate-700" />
           </div>
           <button onClick={() => setAddOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            <Plus size={16} />Add Person
+            className="flex items-center gap-2 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+            style={{ background: '#2563eb' }}>
+            <Plus size={16} />Register Person
           </button>
         </div>
 
         {filtered.length === 0
-          ? <div className="bg-white border border-slate-200 rounded-xl py-20 text-center">
-              <Users size={36} className="mx-auto text-slate-200 mb-3" />
-              <p className="text-slate-400 font-medium">No persons registered yet</p>
+          ? <div className="rounded-xl py-24 text-center"
+              style={{ background: '#0c1528', border: '1px solid #1a2744' }}>
+              <Users size={40} className="mx-auto mb-4" style={{ color: '#1a2744' }} />
+              <p className="text-slate-600 font-medium">No persons registered</p>
               <button onClick={() => setAddOpen(true)}
-                className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium">Add the first person →</button>
+                className="mt-3 text-sm font-semibold transition-colors text-blue-500 hover:text-blue-400">
+                Register the first person →
+              </button>
             </div>
           : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map(p => (
@@ -216,26 +234,28 @@ export default function PersonsPage() {
 
       <Modal open={!!viewPerson} onClose={() => setViewPerson(null)} title={`${viewPerson?.name} — Visit History`} width="max-w-2xl">
         {viewPerson && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex flex-wrap gap-1.5">
               {viewPerson.plateNumbers?.map((p: string) => <span key={p} className="plate-badge">{p}</span>)}
             </div>
             {(!viewPerson.visits || viewPerson.visits.length === 0)
-              ? <p className="text-slate-400 text-sm text-center py-8">No visits recorded yet</p>
+              ? <p className="text-slate-600 text-sm text-center py-10">No visits recorded yet</p>
               : <div className="space-y-2 max-h-80 overflow-y-auto">
                   {viewPerson.visits.map((v: any) => (
-                    <div key={v.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                    <div key={v.id} className="flex items-center gap-3 p-3 rounded-lg"
+                      style={{ background: '#080f1e', border: '1px solid #1a2744' }}>
                       {v.thumbnailBase64 && (
                         <img src={`data:image/jpeg;base64,${v.thumbnailBase64}`} alt={v.plateText}
-                          className="w-14 h-8 object-cover rounded border border-slate-200" />
+                          className="w-14 h-8 object-cover rounded"
+                          style={{ border: '1px solid #1a2744' }} />
                       )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="plate-badge text-xs">{v.plateText}</span>
-                          <span className="text-xs text-slate-400">{Math.round(v.confidence * 100)}%</span>
+                          <span className="text-xs font-bold" style={{ color: '#64748b' }}>{Math.round(v.confidence * 100)}%</span>
                         </div>
                       </div>
-                      <p className="text-xs text-slate-400">{new Date(v.timestamp).toLocaleString()}</p>
+                      <p className="text-xs font-mono" style={{ color: '#334155' }}>{new Date(v.timestamp).toLocaleString()}</p>
                     </div>
                   ))}
                 </div>}
