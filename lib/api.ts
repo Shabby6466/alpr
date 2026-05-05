@@ -1,0 +1,53 @@
+const BASE = '/api'
+
+async function req<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${url}`, options)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }))
+    throw new Error(err.message || 'Request failed')
+  }
+  return res.json()
+}
+
+function json(body: unknown): RequestInit {
+  return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+export const api = {
+  health: () => req('/alpr/health'),
+
+  detect: (formData: FormData, params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params) : ''
+    return req<any>(`/alpr/detect${qs}`, { method: 'POST', body: formData })
+  },
+
+  detectUrl: (body: Record<string, unknown>) =>
+    req<any>('/alpr/detect-url', { method: 'POST', ...json(body) }),
+
+  // Events
+  getEvents: (params?: Record<string, string>) =>
+    req<{ total: number; data: any[] }>(`/events?${new URLSearchParams(params ?? {})}`),
+  deleteEvent: (id: string) => fetch(`${BASE}/events/${id}`, { method: 'DELETE' }),
+
+  // Persons
+  getPersons: () => req<any[]>('/persons'),
+  getPerson:  (id: string) => req<any>(`/persons/${id}`),
+  createPerson: (body: unknown) => req<any>('/persons', { method: 'POST', ...json(body) }),
+  updatePerson: (id: string, body: unknown) => req<any>(`/persons/${id}`, { method: 'PUT', ...json(body) }),
+  deletePerson: (id: string) => fetch(`${BASE}/persons/${id}`, { method: 'DELETE' }),
+
+  // Watchlist
+  getWatchlist: (params?: Record<string, string>) =>
+    req<any[]>(`/watchlist?${new URLSearchParams(params ?? {})}`),
+  createWatchlist: (body: unknown) => req<any>('/watchlist', { method: 'POST', ...json(body) }),
+  updateWatchlist: (id: string, body: unknown) =>
+    req<any>(`/watchlist/${id}`, { method: 'PATCH', ...json(body) }),
+  deleteWatchlist: (id: string) => fetch(`${BASE}/watchlist/${id}`, { method: 'DELETE' }),
+
+  // Alerts
+  getAlerts: (params?: Record<string, string>) =>
+    req<any[]>(`/alerts?${new URLSearchParams(params ?? {})}`),
+  acknowledgeAlert: (id: string) =>
+    req<any>(`/alerts/${id}/acknowledge`, { method: 'PATCH' }),
+  deleteAlert: (id: string) => fetch(`${BASE}/alerts/${id}`, { method: 'DELETE' }),
+}
