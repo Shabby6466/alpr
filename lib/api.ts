@@ -38,6 +38,7 @@ export const api = {
   createPerson: (body: unknown) => req<any>('/persons', { method: 'POST', ...json(body) }),
   updatePerson: (id: string, body: unknown) => req<any>(`/persons/${id}`, { method: 'PUT', ...json(body) }),
   deletePerson: (id: string) => fetch(`${BASE}/persons/${id}`, { method: 'DELETE' }),
+  enrollFace: (id: string, formData: FormData) => req<any>(`/persons/${id}/enroll-face`, { method: 'POST', body: formData }),
 
   // Watchlist
   getWatchlist: (params?: Record<string, string>) =>

@@ -73,6 +73,7 @@ All backend calls go through the `api` object. Throws `Error` with the server's 
 api.health()
 api.detect(formData, params?)          // POST /api/alpr/detect
 api.detectUrl(body)                    // POST /api/alpr/detect-url
+api.detectStream(body)                 // POST /api/alpr/detect-stream (returns native Response for SSE)
 api.getEvents(params?)                 // GET  /api/events
 api.deleteEvent(id)
 api.getPersons()
@@ -111,7 +112,8 @@ Used in: `layout.tsx` (alert count), `page.tsx` (dashboard feed + alerts), `even
 
 ### Detection (`/detect`)
 - **Image tab**: drag-drop zone or click-to-upload. Region selector (North American / European / Pacific). Shows plate cards with thumbnail, confidence badge, bounding box, person match.
-- **Video tab**: file upload, streams SSE response from `POST /api/alpr/detect-video`. Results appear per-frame as they arrive. Shows unique plate count on completion.
+- **Video tab**: file upload, streams SSE response from `POST /api/alpr/detect-video`. Results appear per-frame as they arrive. Shows unique plate count on completion. Max size 1GB.
+- **Live Feed tab**: RTSP/HTTP stream URL input. Monitoring for plates in real-time. Shows scrollable "Recent Detections" list (last 50 frames). Automatically handles timestamp synchronization.
 
 ### Events Log (`/events`)
 - Table: thumbnail, plate badge, confidence badge (green ≥90%, amber ≥70%, red <70%), person name, source badge, timestamp.
@@ -162,6 +164,6 @@ All pages follow the same pattern:
 ## Known Constraints
 
 - `layout.tsx` uses `'use client'` — there is no RSC data fetching. All data is client-side.
-- Video detection SSE (`/api/alpr/detect-video`) is consumed with a manual `ReadableStream` reader in `VideoDetector`, not `EventSource`, because it's a `POST` request (EventSource only supports GET).
+- Video/Stream detection SSE (`/api/alpr/detect-video` and `/detect-stream`) are consumed with a manual `ReadableStream` reader, not `EventSource`, because they are `POST` requests.
 - Next.js 16 / React 19 — some third-party libraries may not be compatible. Check peer deps before adding packages.
 - The workspace-root warning about multiple lockfiles (`/Users/Akmal/package-lock.json` vs this project's) is cosmetic and does not affect functionality.

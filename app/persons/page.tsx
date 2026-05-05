@@ -6,7 +6,7 @@ import Modal from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { Person } from '@/types'
-import { Plus, Pencil, Trash2, Users, Clock, Car } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, Clock, Car, User, Camera } from 'lucide-react'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -59,23 +59,35 @@ function PersonForm({ initial, onSave, onCancel }: {
   )
 }
 
-function PersonCard({ person, onEdit, onDelete, onView }: {
-  person: Person; onEdit: () => void; onDelete: () => void; onView: () => void
+function PersonCard({ person, onEdit, onDelete, onView, onEnrollFace }: {
+  person: Person; onEdit: () => void; onDelete: () => void; onView: () => void; onEnrollFace: () => void
 }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-colors">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-semibold text-slate-800">{person.name}</h3>
-          {person.notes && <p className="text-xs text-slate-500 mt-0.5">{person.notes}</p>}
+      <div className="flex items-start gap-4 mb-3">
+        <div className="w-16 h-16 rounded-xl bg-slate-100 flex-shrink-0 border border-slate-200 overflow-hidden flex items-center justify-center relative group cursor-pointer" onClick={onEnrollFace}>
+          {(person as any).faceThumbnail ? (
+            <img src={`data:image/jpeg;base64,${(person as any).faceThumbnail}`} alt={person.name} className="w-full h-full object-cover" />
+          ) : (
+            <User className="text-slate-300" size={24} />
+          )}
+          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+            <Camera className="text-white" size={16} />
+          </div>
         </div>
-        <div className="flex gap-1">
-          <button onClick={onEdit} className="p-1.5 text-slate-400 hover:text-blue-500 rounded hover:bg-blue-50 transition-colors">
-            <Pencil size={14} />
-          </button>
-          <button onClick={onDelete} className="p-1.5 text-slate-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors">
-            <Trash2 size={14} />
-          </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between">
+            <h3 className="font-semibold text-slate-800 truncate">{person.name}</h3>
+            <div className="flex gap-1">
+              <button onClick={onEdit} className="p-1.5 text-slate-400 hover:text-blue-500 rounded hover:bg-blue-50 transition-colors">
+                <Pencil size={14} />
+              </button>
+              <button onClick={onDelete} className="p-1.5 text-slate-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+          {person.notes && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{person.notes}</p>}
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5 mb-3">
@@ -102,6 +114,27 @@ export default function PersonsPage() {
   const [editPerson, setEditPerson] = useState<Person | null>(null)
   const [viewPerson, setViewPerson] = useState<any | null>(null)
   const [search, setSearch] = useState('')
+  const fileInputRef = useState<any>(null)
+  const [enrollId, setEnrollId] = useState<string | null>(null)
+
+  const handleEnroll = (id: string) => {
+    setEnrollId(id)
+    const input = document.getElementById('enroll-input') as HTMLInputElement
+    input?.click()
+  }
+
+  const uploadFace = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !enrollId) return
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      await api.enrollFace(enrollId, fd)
+      toast('Face enrolled successfully', 'success')
+      mutate()
+    } catch (e: any) { toast(e.message, 'error') }
+    finally { setEnrollId(null); e.target.value = '' }
+  }
 
   const filtered = persons.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -166,8 +199,10 @@ export default function PersonsPage() {
                 <PersonCard key={p.id} person={p}
                   onEdit={() => setEditPerson(p)}
                   onDelete={() => remove(p.id)}
-                  onView={() => viewHistory(p)} />
+                  onView={() => viewHistory(p)}
+                  onEnrollFace={() => handleEnroll(p.id)} />
               ))}
+              <input id="enroll-input" type="file" accept="image/*" className="hidden" onChange={uploadFace} />
             </div>}
       </main>
 

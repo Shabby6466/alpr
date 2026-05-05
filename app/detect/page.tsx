@@ -3,8 +3,8 @@ import { useRef, useState, useCallback } from 'react'
 import TopBar from '@/components/ui/TopBar'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
-import { DetectionResult, PlateResult } from '@/types'
-import { Upload, Video, Car, X, Loader2, Play, CheckCircle, Activity } from 'lucide-react'
+import { DetectionResult, PlateResult, FaceResult, CombinedResult } from '@/types'
+import { Upload, Video, Car, X, Loader2, Play, CheckCircle, Activity, User } from 'lucide-react'
 
 function PlateCard({ plate }: { plate: PlateResult }) {
   const pct = Math.round(plate.confidence * 100)
@@ -28,6 +28,38 @@ function PlateCard({ plate }: { plate: PlateResult }) {
         )}
         <div><span className="font-medium">Pos:</span> {Math.round(plate.boundingBox.x)},{Math.round(plate.boundingBox.y)}</div>
         <div><span className="font-medium">Size:</span> {Math.round(plate.boundingBox.width)}×{Math.round(plate.boundingBox.height)}</div>
+      </div>
+    </div>
+  )
+}
+
+function FaceCard({ face }: { face: FaceResult }) {
+  const pct = Math.round(face.confidence * 100)
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <User size={18} className="text-blue-500" />
+          <span className="font-bold text-slate-700">{face.personName || 'Unknown Face'}</span>
+        </div>
+        <span className={`text-sm font-bold px-2 py-1 rounded-lg ${pct >= 90 ? 'bg-green-100 text-green-700' : pct >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+          {pct}%
+        </span>
+      </div>
+      {face.thumbnail && (
+        <img src={`data:image/jpeg;base64,${face.thumbnail}`} alt="Face"
+          className="w-full h-32 object-cover bg-slate-50 rounded-lg border border-slate-100" />
+      )}
+      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
+        {face.similarity !== undefined && (
+          <div className="col-span-2 flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span className="font-medium text-slate-600">Match Confidence:</span>
+            <span className={`font-bold ${face.similarity > 0.5 ? 'text-green-600' : 'text-amber-600'}`}>
+              {Math.round(face.similarity * 100)}%
+            </span>
+          </div>
+        )}
+        <div className="col-span-2"><span className="font-medium">Pos:</span> {Math.round(face.boundingBox.x)},{Math.round(face.boundingBox.y)}</div>
       </div>
     </div>
   )
@@ -112,21 +144,28 @@ function ImageDetector() {
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle size={16} className="text-green-500" />
             <span className="text-sm font-medium text-slate-700">
-              {result.count} plate{result.count !== 1 ? 's' : ''} detected in {result.processingTimeMs}ms
+              Found {result.plates.length} plates and {result.faces.length} faces in {result.processingTimeMs}ms
             </span>
           </div>
-          {result.count === 0
-            ? <div className="text-center py-8 text-slate-400 bg-white rounded-xl border border-slate-200">No license plates found in this image</div>
-            : <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {result.plates.map((p, i) => <PlateCard key={i} plate={p} />)}
-            </div>}
+          <div className="space-y-6">
+            {result.plates.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {result.plates.map((p, i) => <PlateCard key={i} plate={p} />)}
+              </div>
+            )}
+            {result.faces.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {result.faces.map((f, i) => <FaceCard key={i} face={f} />)}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-interface VideoFrame { frameIndex: number; plates: PlateResult[]; processingTimeMs: number }
+interface VideoFrame extends CombinedResult {}
 
 function VideoDetector() {
   const { toast } = useToast()
@@ -169,7 +208,7 @@ function VideoDetector() {
           if (!dataLine) continue
           const data = JSON.parse(dataLine.slice(5).trim())
           if (eventLine?.includes('done')) { setDone(true); break }
-          if (data.plates?.length > 0) setFrames(f => [...f, data])
+          if (data.plates?.length > 0 || data.faces?.length > 0) setFrames(f => [...f, data])
         }
       }
       toast('Video processing complete', 'success')
@@ -183,6 +222,7 @@ function VideoDetector() {
 
   const clear = () => { setFile(null); setFrames([]); setDone(false) }
   const totalPlates = new Set(frames.flatMap(f => f.plates.map(p => p.text))).size
+  const totalFaces = frames.reduce((acc, f) => acc + f.faces.length, 0)
 
   return (
     <div className="space-y-4">
@@ -226,7 +266,7 @@ function VideoDetector() {
         <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
           <CheckCircle size={16} className="text-green-600" />
           <span className="text-sm font-medium text-green-700">
-            Done — {frames.length} frames with plates, {totalPlates} unique plate{totalPlates !== 1 ? 's' : ''}
+            Done — {totalPlates} unique plates, {totalFaces} faces detected across {frames.length} frames
           </span>
         </div>
       )}
@@ -242,6 +282,18 @@ function VideoDetector() {
                     <span className="plate-badge">{p.text}</span>
                     <span className="text-xs text-slate-500">{Math.round(p.confidence * 100)}%</span>
                     {p.personName && <span className="text-xs text-blue-600">👤 {p.personName}</span>}
+                  </div>
+                ))}
+                {frame.faces.map((f, j) => (
+                  <div key={j} className="flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-lg">
+                    <User size={14} className="text-blue-500" />
+                    <span className="text-xs font-bold text-blue-700">{f.personName || 'Unknown'}</span>
+                    <span className="text-xs text-blue-400">Det: {Math.round(f.confidence * 100)}%</span>
+                    {f.similarity !== undefined && (
+                      <span className={`text-xs font-bold ${f.similarity > 0.5 ? 'text-green-600' : 'text-amber-500'}`}>
+                        Match: {Math.round(f.similarity * 100)}%
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -289,7 +341,7 @@ function LiveDetector() {
           const data = JSON.parse(dataLine.slice(5).trim())
           if (eventLine?.includes('error')) { throw new Error(data.error) }
           if (eventLine?.includes('done')) { setDone(true); break }
-          if (data.plates?.length > 0) setFrames(f => [data, ...f.slice(0, 49)]) // Keep last 50 detection frames
+          if (data.plates?.length > 0 || data.faces?.length > 0) setFrames(f => [data, ...f.slice(0, 49)]) // Keep last 50 detection frames
         }
       }
     } catch (e: any) {
@@ -356,8 +408,8 @@ function LiveDetector() {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm font-bold text-blue-700">{frames.length}</p>
-            <p className="text-xs text-blue-500">Plates Found</p>
+            <p className="text-sm font-bold text-blue-700">{frames.reduce((acc, f) => acc + f.plates.length, 0)} Plates / {frames.reduce((acc, f) => acc + f.faces.length, 0)} Faces</p>
+            <p className="text-xs text-blue-500">Live Detections</p>
           </div>
         </div>
       )}
@@ -381,6 +433,27 @@ function LiveDetector() {
                       </div>
                       {p.thumbnail && (
                         <img src={`data:image/jpeg;base64,${p.thumbnail}`} alt={p.text} className="w-full h-12 object-contain bg-slate-100 rounded border border-slate-200" />
+                      )}
+                    </div>
+                  ))}
+                  {frame.faces.map((f, j) => (
+                    <div key={j} className="flex flex-col gap-1 w-full border-t border-slate-100 pt-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <User size={14} className="text-blue-500" />
+                          <span className="text-sm font-bold text-blue-700">{f.personName || 'Unknown Face'}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[10px] text-slate-400">Det: {Math.round(f.confidence * 100)}%</span>
+                          {f.similarity !== undefined && (
+                            <span className={`text-xs font-bold ${f.similarity > 0.5 ? 'text-green-600' : 'text-amber-500'}`}>
+                              Match: {Math.round(f.similarity * 100)}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {f.thumbnail && (
+                        <img src={`data:image/jpeg;base64,${f.thumbnail}`} alt="Face" className="w-full h-24 object-cover bg-slate-100 rounded border border-slate-200" />
                       )}
                     </div>
                   ))}

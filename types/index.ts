@@ -10,14 +10,31 @@ export interface PlateResult {
   thumbnail?: string
   region?: string
   state?: string
+  personName?: string
+}
+
+export interface FaceResult {
+  confidence: number
+  quality: number
+  boundingBox: BoundingBox
+  thumbnail?: string
   personId?: string
   personName?: string
+  similarity?: number
 }
 
 export interface DetectionResult {
   success: boolean
   count: number
   plates: PlateResult[]
+  faces: FaceResult[]
+  processingTimeMs: number
+}
+
+export interface CombinedResult {
+  frameIndex: number
+  plates: PlateResult[]
+  faces: FaceResult[]
   processingTimeMs: number
 }
 
