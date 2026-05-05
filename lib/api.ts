@@ -24,6 +24,9 @@ export const api = {
   detectUrl: (body: Record<string, unknown>) =>
     req<any>('/alpr/detect-url', { method: 'POST', ...json(body) }),
 
+  detectStream: (body: Record<string, unknown>) =>
+    fetch(`${BASE}/alpr/detect-stream`, { method: 'POST', ...json(body) }),
+
   // Events
   getEvents: (params?: Record<string, string>) =>
     req<{ total: number; data: any[] }>(`/events?${new URLSearchParams(params ?? {})}`),
