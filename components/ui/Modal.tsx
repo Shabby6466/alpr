@@ -13,29 +13,42 @@ interface Props {
 export default function Modal({ open, onClose, title, children, width = 'max-w-lg' }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
+    if (open) {
+      document.addEventListener('keydown', handler)
+      document.body.style.overflow = 'hidden'
+    }
+    return () => {
+      document.removeEventListener('keydown', handler)
+      document.body.style.overflow = 'unset'
+    }
+  }, [open, onClose])
 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
-      <div className={`relative w-full ${width} flex flex-col max-h-[90vh] rounded-xl overflow-hidden`}
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-md"
+        onClick={onClose}
+      />
+      <div
+        className={`relative bg-white w-full ${width} flex flex-col max-h-[90vh] shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300`}
         style={{
-          background: '#0c1528',
-          border: '1px solid #1a2744',
-          boxShadow: '0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(37,99,235,0.1)',
-        }}>
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid #1a2744' }}>
-          <h2 className="font-semibold text-slate-100 text-base">{title}</h2>
-          <button onClick={onClose}
-            className="text-slate-600 hover:text-slate-300 rounded-lg p-1.5 hover:bg-slate-800 transition-colors">
-            <X size={18} />
+          borderRadius: 24,
+          boxShadow: '0 30px 60px -12px rgba(0,0,0,0.25), 0 18px 36px -18px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div className="flex items-center justify-between px-6 py-5 shrink-0"
+          style={{ borderBottom: '1px solid rgba(60,60,67,0.06)' }}>
+          <h2 className="font-bold text-lg tracking-tight" style={{ color: '#1D1D1F' }}>{title}</h2>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-8 h-8 rounded-full transition-all bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+          >
+            <X size={16} strokeWidth={2.5} />
           </button>
         </div>
-        <div className="overflow-y-auto flex-1 p-6">
+        <div className="overflow-y-auto flex-1 px-6 py-6 custom-scrollbar">
           {children}
         </div>
       </div>

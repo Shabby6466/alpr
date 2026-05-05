@@ -4,21 +4,24 @@ import TopBar from '@/components/ui/TopBar'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { DetectionResult, PlateResult, FaceResult, CombinedResult } from '@/types'
-import { Upload, Video, Car, X, Loader2, Play, CheckCircle, Activity, User, Square } from 'lucide-react'
+import { Upload, Video, Car, X, Loader2, Play, CheckCircle, Activity, User, Square, Globe } from 'lucide-react'
 
-const surface = { background: '#0c1528', border: '1px solid #1a2744', borderRadius: 12 }
-const surfaceIn = { background: '#07101e', border: '1px solid #1a2744', borderRadius: 8 }
+const appleCard = {
+  background: '#FFFFFF',
+  borderRadius: 16,
+  boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)',
+}
 
 function ConfBadge({ v, size = 'sm' }: { v: number; size?: 'sm' | 'lg' }) {
   const pct = Math.round(v * 100)
   const [color, bg] = pct >= 90
-    ? ['#4ade80', 'rgba(74,222,128,0.12)']
+    ? ['#30D158', 'rgba(48,209,88,0.1)']
     : pct >= 70
-    ? ['#fbbf24', 'rgba(251,191,36,0.12)']
-    : ['#f87171', 'rgba(248,113,113,0.12)']
+    ? ['#FF9500', 'rgba(255,149,0,0.1)']
+    : ['#FF3B30', 'rgba(255,59,48,0.1)']
   return (
-    <span className={`font-bold rounded-full ${size === 'lg' ? 'text-base px-3 py-1' : 'text-xs px-2 py-0.5'}`}
-      style={{ color, background: bg, border: `1px solid ${color}30` }}>
+    <span className={`font-bold tabular-nums rounded-full ${size === 'lg' ? 'text-sm px-3 py-1' : 'text-[10px] px-2 py-0.5'}`}
+      style={{ color, background: bg }}>
       {pct}%
     </span>
   )
@@ -26,26 +29,24 @@ function ConfBadge({ v, size = 'sm' }: { v: number; size?: 'sm' | 'lg' }) {
 
 function PlateCard({ plate }: { plate: PlateResult }) {
   return (
-    <div className="rounded-xl p-4 space-y-3" style={surface}>
+    <div style={appleCard} className="p-4 space-y-3 transition-transform hover:scale-[1.02]">
       <div className="flex items-center justify-between">
         <span className="plate-badge text-base">{plate.text}</span>
         <ConfBadge v={plate.confidence} size="lg" />
       </div>
       {plate.thumbnail && (
         <img src={`data:image/jpeg;base64,${plate.thumbnail}`} alt={plate.text}
-          className="w-full h-20 object-contain rounded-lg"
-          style={{ background: '#070e1c', border: '1px solid #1a2744' }} />
+          className="w-full h-24 object-contain rounded-xl"
+          style={{ background: '#F2F2F7', border: '1px solid rgba(60,60,67,0.08)' }} />
       )}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs" style={{ color: '#475569' }}>
-        {plate.region && <div><span className="font-semibold text-slate-500">Region</span> {plate.region}</div>}
-        {plate.state && <div><span className="font-semibold text-slate-500">State</span> {plate.state}</div>}
+      <div className="grid grid-cols-2 gap-2 text-[11px] font-medium" style={{ color: '#8E8E93' }}>
+        {plate.region && <div className="bg-slate-50 px-2 py-1 rounded-md"><span className="text-[9px] uppercase text-slate-400 block">Region</span> {plate.region}</div>}
+        {plate.state && <div className="bg-slate-50 px-2 py-1 rounded-md"><span className="text-[9px] uppercase text-slate-400 block">State</span> {plate.state}</div>}
         {plate.personName && (
-          <div className="col-span-2 flex items-center gap-1.5 font-semibold text-blue-400">
-            <User size={11} />matched: {plate.personName}
+          <div className="col-span-2 flex items-center gap-1.5 font-bold px-2 py-1.5 rounded-md" style={{ color: '#007AFF', background: 'rgba(0,122,255,0.05)' }}>
+            <User size={12} />Matched: {plate.personName}
           </div>
         )}
-        <div className="text-slate-700">Pos: {Math.round(plate.boundingBox.x)},{Math.round(plate.boundingBox.y)}</div>
-        <div className="text-slate-700">Size: {Math.round(plate.boundingBox.width)}×{Math.round(plate.boundingBox.height)}</div>
       </div>
     </div>
   )
@@ -53,27 +54,27 @@ function PlateCard({ plate }: { plate: PlateResult }) {
 
 function FaceCard({ face }: { face: FaceResult }) {
   return (
-    <div className="rounded-xl p-4 space-y-3" style={surface}>
+    <div style={appleCard} className="p-4 space-y-3 transition-transform hover:scale-[1.02]">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.2)' }}>
-            <User size={15} className="text-blue-400" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm"
+            style={{ background: 'linear-gradient(145deg, #007AFF, #0055D4)' }}>
+            <User size={15} className="text-white" />
           </div>
-          <span className="font-bold text-slate-100 text-sm">{face.personName || 'Unknown'}</span>
+          <span className="font-bold text-sm" style={{ color: '#1D1D1F' }}>{face.personName || 'Unknown Face'}</span>
         </div>
         <ConfBadge v={face.confidence} size="lg" />
       </div>
       {face.thumbnail && (
         <img src={`data:image/jpeg;base64,${face.thumbnail}`} alt="Face"
-          className="w-full h-32 object-cover rounded-lg"
-          style={{ border: '1px solid #1a2744' }} />
+          className="w-full h-36 object-cover rounded-xl shadow-inner"
+          style={{ border: '1px solid rgba(60,60,67,0.08)' }} />
       )}
       {face.similarity !== undefined && (
-        <div className="flex justify-between items-center px-3 py-2 rounded-lg"
-          style={{ background: '#080f1e', border: '1px solid #1a2744' }}>
-          <span className="text-xs text-slate-500 font-semibold">Match confidence</span>
-          <span className={`text-sm font-bold ${face.similarity > 0.5 ? 'text-green-400' : 'text-amber-400'}`}>
+        <div className="flex justify-between items-center px-3 py-2 rounded-xl"
+          style={{ background: '#F2F2F7' }}>
+          <span className="text-[11px] text-slate-500 font-bold uppercase tracking-tight">Biometric Match</span>
+          <span className={`text-sm font-bold tabular-nums ${face.similarity > 0.5 ? 'text-[#30D158]' : 'text-[#FF9500]'}`}>
             {Math.round(face.similarity * 100)}%
           </span>
         </div>
@@ -84,13 +85,15 @@ function FaceCard({ face }: { face: FaceResult }) {
 
 function RegionSelect({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
-      className="rounded-lg px-3 py-2 text-sm text-slate-300 outline-none cursor-pointer flex-1 disabled:opacity-50"
-      style={{ background: '#07101e', border: '1px solid #1a2744' }}>
-      <option value="NORTH_AMERICAN">North American</option>
-      <option value="EUROPEAN">European</option>
-      <option value="PACIFIC">Pacific</option>
-    </select>
+    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white shadow-sm border border-slate-100 flex-1">
+      <Globe size={14} className="text-slate-400" />
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+        className="text-sm font-semibold text-slate-700 outline-none cursor-pointer w-full bg-transparent disabled:opacity-50">
+        <option value="NORTH_AMERICAN">North American</option>
+        <option value="EUROPEAN">European</option>
+        <option value="PACIFIC">Pacific</option>
+      </select>
+    </div>
   )
 }
 
@@ -122,61 +125,76 @@ function ImageDetector() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div
-        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'drop-active' : ''}`}
-        style={file ? { ...surfaceIn, borderStyle: 'dashed', borderColor: '#1e3a5f' } : { background: '#080f1e', borderColor: '#1a2744' }}
+        className={`relative border-2 border-dashed rounded-3xl p-10 text-center transition-all duration-300 ${dragging ? 'drop-active' : ''}`}
+        style={file 
+          ? { background: 'white', borderColor: '#007AFF', borderStyle: 'solid' } 
+          : { background: 'rgba(255,255,255,0.5)', borderColor: 'rgba(60,60,67,0.1)' }}
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
         onClick={() => !file && inputRef.current?.click()}>
         <input ref={inputRef} type="file" accept="image/*" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-        {preview
-          ? <img src={preview} alt="preview" className="max-h-48 mx-auto rounded-lg object-contain" />
-          : <>
-            <div className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
-              style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)' }}>
-              <Upload size={24} className="text-blue-400" />
+        
+        {preview ? (
+          <div className="relative group">
+            <img src={preview} alt="preview" className="max-h-64 mx-auto rounded-2xl shadow-lg object-contain bg-slate-50" />
+            <button onClick={(e) => { e.stopPropagation(); clear() }}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
+              <X size={16} strokeWidth={2.5} />
+            </button>
+          </div>
+        ) : (
+          <div className="py-6">
+            <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center shadow-sm"
+              style={{ background: 'linear-gradient(135deg, rgba(0,122,255,0.1), rgba(0,122,255,0.05))' }}>
+              <Upload size={28} className="text-[#007AFF]" strokeWidth={2} />
             </div>
-            <p className="text-slate-400 font-semibold">Drop an image here or click to upload</p>
-            <p className="text-xs text-slate-700 mt-1">JPG, PNG, BMP — up to 20MB</p>
-          </>}
+            <p className="text-lg font-bold tracking-tight" style={{ color: '#1D1D1F' }}>Upload Image</p>
+            <p className="text-sm mt-1.5" style={{ color: '#8E8E93' }}>Drag and drop or click to browse</p>
+            <div className="mt-6 flex items-center justify-center gap-3">
+               <span className="px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-400 rounded">JPG</span>
+               <span className="px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-400 rounded">PNG</span>
+               <span className="px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-400 rounded">20MB MAX</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {file && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2">
           <RegionSelect value={region} onChange={setRegion} />
           <button onClick={detect} disabled={loading}
-            className="flex items-center gap-2 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
-            style={{ background: '#2563eb' }}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-            {loading ? 'Detecting…' : 'Detect Plates'}
-          </button>
-          <button onClick={clear} className="p-2 rounded-lg transition-colors text-slate-600 hover:text-slate-300"
-            style={{ background: '#080f1e', border: '1px solid #1a2744' }}>
-            <X size={18} />
+            className="btn-apple flex items-center gap-2 px-6 h-10 min-w-[140px] justify-center">
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
+            {loading ? 'Processing…' : 'Detect Now'}
           </button>
         </div>
       )}
 
       {result && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl"
-            style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
-            <CheckCircle size={16} className="text-green-400" />
-            <span className="text-sm font-semibold text-green-300">
-              {result.plates.length} plates, {result.faces.length} faces — {result.processingTimeMs}ms
+        <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl"
+            style={{ background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.15)' }}>
+            <div className="w-6 h-6 rounded-full bg-[#30D158] flex items-center justify-center">
+               <CheckCircle size={14} className="text-white" />
+            </div>
+            <span className="text-sm font-bold text-[#248A3D]">
+              Found {result.plates.length} plates and {result.faces.length} faces in {result.processingTimeMs}ms
             </span>
           </div>
-          {result.plates.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {result.plates.map((p, i) => <PlateCard key={i} plate={p} />)}
+          
+          {(result.plates.length > 0 || result.faces.length > 0) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {result.plates.map((p, i) => <PlateCard key={`p-${i}`} plate={p} />)}
+              {result.faces.map((f, i) => <FaceCard key={`f-${i}`} face={f} />)}
             </div>
-          )}
-          {result.faces.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {result.faces.map((f, i) => <FaceCard key={i} face={f} />)}
+          ) : (
+            <div className="py-12 text-center" style={appleCard}>
+               <Activity size={32} className="mx-auto mb-3 text-slate-200" />
+               <p className="text-sm font-semibold text-slate-400">No objects identified</p>
             </div>
           )}
         </div>
@@ -231,30 +249,27 @@ function VideoDetector() {
   const totalFaces = frames.reduce((acc, f) => acc + f.faces.length, 0)
 
   return (
-    <div className="space-y-4">
-      <div className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${file ? '' : ''}`}
-        style={file ? { ...surfaceIn, borderStyle: 'dashed', borderColor: '#4c1d95' } : { background: '#080f1e', borderColor: '#1a2744' }}
+    <div className="space-y-5">
+      <div className={`border-2 border-dashed rounded-3xl p-10 text-center cursor-pointer transition-all ${file ? 'bg-white border-indigo-500 border-solid' : 'bg-white/50 border-slate-200 hover:border-slate-300'}`}
         onClick={() => !streaming && inputRef.current?.click()}>
         <input ref={inputRef} type="file" accept="video/*" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setFrames([]); setDone(false) } }} />
         {file ? (
-          <>
-            <div className="w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center"
-              style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.25)' }}>
-              <Video size={24} className="text-violet-400" />
+          <div className="py-2">
+            <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-sm bg-indigo-50">
+              <Video size={28} className="text-indigo-600" />
             </div>
-            <p className="font-semibold text-slate-200">{file.name}</p>
-            <p className="text-xs text-slate-600 mt-1">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-          </>
+            <p className="font-bold text-lg" style={{ color: '#1D1D1F' }}>{file.name}</p>
+            <p className="text-sm font-medium mt-1" style={{ color: '#8E8E93' }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Ready for analysis</p>
+          </div>
         ) : (
-          <>
-            <div className="w-14 h-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
-              style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}>
-              <Video size={24} className="text-violet-400" />
+          <div className="py-6">
+            <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center shadow-sm bg-indigo-50/50">
+              <Video size={28} className="text-indigo-400" />
             </div>
-            <p className="text-slate-400 font-semibold">Drop a video file or click to upload</p>
-            <p className="text-xs text-slate-700 mt-1">MP4, MOV, AVI — up to 500MB</p>
-          </>
+            <p className="text-lg font-bold" style={{ color: '#1D1D1F' }}>Process Video</p>
+            <p className="text-sm mt-1" style={{ color: '#8E8E93' }}>MP4, MOV up to 500MB</p>
+          </div>
         )}
       </div>
 
@@ -262,67 +277,63 @@ function VideoDetector() {
         <div className="flex items-center gap-3">
           <RegionSelect value={region} onChange={setRegion} disabled={streaming} />
           <button onClick={streaming ? undefined : start} disabled={streaming}
-            className="flex items-center gap-2 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
-            style={{ background: '#7c3aed' }}>
-            {streaming ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-            {streaming ? 'Processing…' : 'Start Detection'}
+            className="btn-apple flex items-center gap-2 px-6 h-10 min-w-[160px] justify-center bg-indigo-600">
+            {streaming ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
+            {streaming ? 'Analysing…' : 'Start Processing'}
           </button>
           {!streaming && (
-            <button onClick={clear} className="p-2 rounded-lg transition-colors text-slate-600 hover:text-slate-300"
-              style={{ background: '#080f1e', border: '1px solid #1a2744' }}>
-              <X size={18} />
+            <button onClick={clear} className="w-10 h-10 rounded-xl flex items-center justify-center bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-500 transition-colors">
+              <X size={18} strokeWidth={2.5} />
             </button>
           )}
         </div>
       )}
 
       {streaming && (
-        <div className="rounded-xl p-4 flex items-center gap-4"
-          style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
-          <Loader2 size={20} className="animate-spin text-violet-400 flex-shrink-0" />
+        <div className="rounded-2xl p-5 flex items-center gap-4 bg-indigo-50 border border-indigo-100">
+          <div className="live-ring" style={{ width: 12, height: 12 }} />
           <div>
-            <p className="text-sm font-bold text-violet-300">Analyzing video frames…</p>
-            <p className="text-xs text-violet-600">{frames.length} frames with detections so far</p>
+            <p className="text-sm font-bold text-indigo-900">GPU Acceleration Active</p>
+            <p className="text-xs font-medium text-indigo-500">{frames.length} frames processed · Real-time streaming</p>
           </div>
         </div>
       )}
 
       {done && frames.length > 0 && (
-        <div className="rounded-xl px-4 py-3 flex items-center gap-2.5"
-          style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
-          <CheckCircle size={16} className="text-green-400" />
-          <span className="text-sm font-semibold text-green-300">
-            {totalPlates} unique plates · {totalFaces} faces · {frames.length} frames with detections
+        <div className="rounded-2xl px-5 py-3 flex items-center gap-3 bg-emerald-50 border border-emerald-100">
+          <CheckCircle size={18} className="text-emerald-500" />
+          <span className="text-sm font-bold text-emerald-800">
+            {totalPlates} unique plates · {totalFaces} faces · {frames.length} frames
           </span>
         </div>
       )}
 
       {frames.length > 0 && (
-        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
           {frames.map((frame, i) => (
-            <div key={i} className="rounded-xl overflow-hidden" style={surface}>
-              <div className="px-4 py-2 flex justify-between items-center"
-                style={{ background: '#080f1e', borderBottom: '1px solid #1a2744' }}>
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Frame #{frame.frameIndex}</span>
-                <span className="text-xs font-bold text-violet-500">{frame.processingTimeMs}ms</span>
+            <div key={i} style={appleCard} className="overflow-hidden border border-slate-50">
+              <div className="px-4 py-2.5 flex justify-between items-center bg-slate-50/50">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Frame {frame.frameIndex}</span>
+                <span className="text-[10px] font-bold text-indigo-500">{frame.processingTimeMs}ms</span>
               </div>
-              <div className="p-4 flex flex-wrap gap-2">
+              <div className="p-4 flex flex-wrap gap-3">
                 {frame.plates.map((p, j) => (
-                  <div key={j} className="flex items-center gap-2">
-                    <span className="plate-badge">{p.text}</span>
-                    <span className="text-xs font-bold" style={{ color: '#64748b' }}>{Math.round(p.confidence * 100)}%</span>
-                    {p.personName && <span className="text-xs text-blue-400 font-semibold">● {p.personName}</span>}
+                  <div key={j} className="flex items-center gap-2.5 bg-white border border-slate-100 rounded-lg pl-1.5 pr-3 py-1.5 shadow-sm">
+                    <span className="plate-badge text-xs px-2 py-0.5">{p.text}</span>
+                    <ConfBadge v={p.confidence} />
+                    {p.personName && <span className="text-[11px] text-indigo-600 font-bold">● {p.personName}</span>}
                   </div>
                 ))}
                 {frame.faces.map((f, j) => (
-                  <div key={j} className="flex items-center gap-2 px-2.5 py-1 rounded-lg"
-                    style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)' }}>
-                    <User size={13} className="text-blue-400" />
-                    <span className="text-xs font-bold text-blue-300">{f.personName || 'Unknown'}</span>
-                    <span className="text-xs text-blue-600">Det: {Math.round(f.confidence * 100)}%</span>
+                  <div key={j} className="flex items-center gap-2.5 bg-white border border-slate-100 rounded-lg px-3 py-1.5 shadow-sm">
+                    <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center">
+                       <User size={12} className="text-indigo-600" />
+                    </div>
+                    <span className="text-[11px] font-bold text-indigo-900">{f.personName || 'Unknown'}</span>
+                    <ConfBadge v={f.confidence} />
                     {f.similarity !== undefined && (
-                      <span className={`text-xs font-bold ${f.similarity > 0.5 ? 'text-green-400' : 'text-amber-400'}`}>
-                        Match: {Math.round(f.similarity * 100)}%
+                      <span className={`text-[11px] font-black ${f.similarity > 0.5 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        {Math.round(f.similarity * 100)}% Match
                       </span>
                     )}
                   </div>
@@ -378,100 +389,87 @@ function LiveDetector() {
   const totalFaces = frames.reduce((acc, f) => acc + f.faces.length, 0)
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl p-5 space-y-4" style={surface}>
+    <div className="space-y-5">
+      <div style={appleCard} className="p-6 space-y-5">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Stream URL (RTSP / HTTP)</label>
-          <input type="text"
-            placeholder="rtsp://admin:password@192.168.1.100:554/stream1"
-            value={url} onChange={e => setUrl(e.target.value)} disabled={streaming}
-            className="w-full rounded-lg px-4 py-2.5 text-sm text-slate-200 outline-none disabled:opacity-50 transition-all"
-            style={{ background: '#07101e', border: '1px solid #1a2744' }} />
+          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1">Stream Endpoint (RTSP / HTTP)</label>
+          <div className="relative">
+            <input type="text"
+              placeholder="rtsp://camera-ip:554/live"
+              value={url} onChange={e => setUrl(e.target.value)} disabled={streaming}
+              className="w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 bg-slate-50 border border-slate-100 outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all" />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <RegionSelect value={region} onChange={setRegion} disabled={streaming} />
           {streaming ? (
             <button onClick={() => { setStreaming(false); setDone(true) }}
-              className="flex items-center gap-2 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors"
-              style={{ background: '#dc2626' }}>
-              <Square size={14} /> Stop Stream
+              className="flex items-center gap-2 text-white px-6 h-10 rounded-xl text-sm font-bold bg-red-500 hover:bg-red-600 transition-colors shadow-sm">
+              <Square size={14} fill="white" /> Stop Stream
             </button>
           ) : (
             <button onClick={start} disabled={!url}
-              className="flex items-center gap-2 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
-              style={{ background: '#2563eb' }}>
-              <Play size={16} /> Start Feed
+              className="btn-apple flex items-center gap-2 px-8 h-10 justify-center shadow-md">
+              <Play size={16} fill="currentColor" /> Connect
             </button>
           )}
         </div>
       </div>
 
       {streaming && (
-        <div className="rounded-xl p-4 flex items-center justify-between"
-          style={{ background: 'rgba(6,182,212,0.07)', border: '1px solid rgba(6,182,212,0.2)' }}>
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-3 w-3">
-              <span className="live-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
-            </span>
+        <div className="rounded-2xl p-5 flex items-center justify-between bg-cyan-50 border border-cyan-100 animate-pulse">
+          <div className="flex items-center gap-4">
+            <div className="live-ring" />
             <div>
-              <p className="text-sm font-bold text-cyan-300">Live Feed Active</p>
-              <p className="text-xs text-cyan-600">Monitoring for license plates…</p>
+              <p className="text-sm font-bold text-cyan-900">Link Established</p>
+              <p className="text-xs font-medium text-cyan-600">Analyzing {frames.length} frames/sec</p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm font-bold text-cyan-300">{totalPlates} Plates · {totalFaces} Faces</p>
-            <p className="text-xs text-cyan-700">{frames.length} detection frames</p>
+            <p className="text-sm font-black text-cyan-900">{totalPlates} PLATES · {totalFaces} FACES</p>
+            <p className="text-[10px] font-bold text-cyan-700 tracking-wider">SECURE TRANSMISSION</p>
           </div>
         </div>
       )}
 
       {frames.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Recent Detections</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-4">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1">Intercepted Detections</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {frames.map((frame, i) => (
-              <div key={i} className="rounded-xl overflow-hidden transition-all hover:border-slate-700"
-                style={surface}>
-                <div className="px-3 py-2 flex justify-between items-center"
-                  style={{ background: '#080f1e', borderBottom: '1px solid #1a2744' }}>
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Frame #{frame.frameIndex}</span>
-                  <span className="text-xs font-bold text-cyan-600">{frame.processingTimeMs}ms</span>
+              <div key={i} style={appleCard} className="overflow-hidden group hover:ring-2 hover:ring-blue-500/10 transition-all">
+                <div className="px-4 py-2 flex justify-between items-center bg-slate-50">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Frame {frame.frameIndex}</span>
+                  <span className="text-[10px] font-bold text-cyan-600">{frame.processingTimeMs}ms</span>
                 </div>
-                <div className="p-3 flex flex-wrap gap-2">
+                <div className="p-4 space-y-4">
                   {frame.plates.map((p, j) => (
-                    <div key={j} className="w-full space-y-1.5">
+                    <div key={j} className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="plate-badge">{p.text}</span>
-                        <span className="text-xs font-bold text-slate-500">{Math.round(p.confidence * 100)}%</span>
+                        <ConfBadge v={p.confidence} />
                       </div>
                       {p.thumbnail && (
                         <img src={`data:image/jpeg;base64,${p.thumbnail}`} alt={p.text}
-                          className="w-full h-12 object-contain rounded"
-                          style={{ background: '#070e1c', border: '1px solid #1a2744' }} />
+                          className="w-full h-14 object-contain rounded-xl bg-slate-50"
+                          style={{ border: '1px solid rgba(60,60,67,0.05)' }} />
                       )}
                     </div>
                   ))}
                   {frame.faces.map((f, j) => (
-                    <div key={j} className="w-full space-y-1.5 pt-2" style={{ borderTop: '1px solid #0f1e38' }}>
+                    <div key={j} className="space-y-2 pt-3 border-t border-slate-50">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <User size={13} className="text-blue-400" />
-                          <span className="text-sm font-bold text-blue-300">{f.personName || 'Unknown'}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center">
+                            <User size={12} className="text-blue-500" />
+                          </div>
+                          <span className="text-xs font-bold text-slate-800">{f.personName || 'Unknown'}</span>
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-xs text-slate-600">Det: {Math.round(f.confidence * 100)}%</span>
-                          {f.similarity !== undefined && (
-                            <span className={`text-xs font-bold ${f.similarity > 0.5 ? 'text-green-400' : 'text-amber-400'}`}>
-                              Match: {Math.round(f.similarity * 100)}%
-                            </span>
-                          )}
-                        </div>
+                        <ConfBadge v={f.confidence} />
                       </div>
                       {f.thumbnail && (
                         <img src={`data:image/jpeg;base64,${f.thumbnail}`} alt="Face"
-                          className="w-full h-24 object-cover rounded"
-                          style={{ border: '1px solid #1a2744' }} />
+                          className="w-full h-28 object-cover rounded-xl shadow-sm" />
                       )}
                     </div>
                   ))}
@@ -489,38 +487,36 @@ export default function DetectPage() {
   const [tab, setTab] = useState<'image' | 'video' | 'live'>('image')
 
   const tabs = [
-    { id: 'image', label: 'Image', icon: Upload, accent: '#2563eb', accentBg: 'rgba(37,99,235,0.15)', accentBorder: 'rgba(37,99,235,0.3)' },
-    { id: 'video', label: 'Video', icon: Video, accent: '#7c3aed', accentBg: 'rgba(124,58,237,0.15)', accentBorder: 'rgba(124,58,237,0.3)' },
-    { id: 'live',  label: 'Live Feed', icon: Activity, accent: '#0891b2', accentBg: 'rgba(8,145,178,0.15)', accentBorder: 'rgba(8,145,178,0.3)' },
+    { id: 'image', label: 'Image', icon: Upload },
+    { id: 'video', label: 'Video', icon: Video },
+    { id: 'live',  label: 'Live Stream', icon: Activity },
   ] as const
 
   return (
-    <>
-      <TopBar title="Detection" subtitle="Upload media or connect a live feed" connected={tab === 'live'} />
+    <div className="min-h-screen bg-[#F2F2F7]">
+      <TopBar title="Detection Intelligence" subtitle="Multimedia processing engine" connected={tab === 'live'} />
       <main className="flex-1 p-6">
-        <div className="max-w-3xl mx-auto space-y-5">
-          {/* Tabs */}
-          <div className="flex gap-2 p-1 rounded-xl w-fit" style={{ background: '#0c1528', border: '1px solid #1a2744' }}>
+        <div className="max-w-4xl mx-auto space-y-6">
+          
+          {/* Segmented Control (Apple Style) */}
+          <div className="flex p-1 bg-white/50 backdrop-blur-md rounded-2xl w-fit mx-auto shadow-sm border border-white/50">
             {tabs.map(t => {
               const active = tab === t.id
               return (
                 <button key={t.id} onClick={() => setTab(t.id as any)}
-                  className="px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all"
-                  style={active ? {
-                    background: t.accentBg,
-                    border: `1px solid ${t.accentBorder}`,
-                    color: t.accent,
-                  } : { color: '#475569', border: '1px solid transparent' }}>
-                  <t.icon size={15} />
+                  className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-2.5 transition-all duration-200 ${active ? 'bg-white text-[#007AFF] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                  <t.icon size={15} strokeWidth={active ? 2.5 : 2} />
                   {t.label}
                 </button>
               )
             })}
           </div>
 
-          {tab === 'image' ? <ImageDetector /> : tab === 'video' ? <VideoDetector /> : <LiveDetector />}
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+             {tab === 'image' ? <ImageDetector /> : tab === 'video' ? <VideoDetector /> : <LiveDetector />}
+          </div>
         </div>
       </main>
-    </>
+    </div>
   )
 }

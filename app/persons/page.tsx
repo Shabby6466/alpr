@@ -6,19 +6,27 @@ import Modal from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { Person } from '@/types'
-import { Plus, Pencil, Trash2, Users, Clock, Car, User, Camera, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, Clock, Car, User, Camera, Search, ChevronRight } from 'lucide-react'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const inputStyle = {
-  background: '#07101e',
-  border: '1px solid #1e3358',
-  borderRadius: 8,
-  padding: '8px 12px',
-  color: '#e2e8f0',
-  fontSize: '0.875rem',
+  background: '#FFFFFF',
+  border: '1px solid rgba(60,60,67,0.1)',
+  borderRadius: 12,
+  padding: '10px 14px',
+  color: '#1D1D1F',
+  fontSize: '14px',
   outline: 'none',
   width: '100%',
+  transition: 'all 0.2s ease',
+}
+
+const appleCard = {
+  background: '#FFFFFF',
+  borderRadius: 20,
+  boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)',
+  transition: 'all 0.2s ease',
 }
 
 function PersonForm({ initial, onSave, onCancel }: {
@@ -34,34 +42,44 @@ function PersonForm({ initial, onSave, onCancel }: {
     onSave({ name: name.trim(), plateNumbers, notes: notes.trim() || undefined })
   }
 
-  const labelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase' as const }
+  const labelStyle = { 
+    display: 'block', 
+    fontSize: '11px', 
+    fontWeight: 700, 
+    color: '#8E8E93', 
+    marginBottom: 6, 
+    marginLeft: 4,
+    letterSpacing: '0.04em', 
+    textTransform: 'uppercase' as const 
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <label style={labelStyle}>Full Name *</label>
-        <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="John Doe" />
+        <label style={labelStyle}>Full Name</label>
+        <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="e.g. Tim Cook" className="focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500" />
       </div>
       <div>
-        <label style={labelStyle}>License Plates * <span style={{ color: '#334155', fontWeight: 400, textTransform: 'none' }}>(one per line)</span></label>
+        <label style={labelStyle}>License Plates <span className="text-[10px] font-normal lowercase">(one per line)</span></label>
         <textarea value={plates} onChange={e => setPlates(e.target.value)} rows={3}
-          style={{ ...inputStyle, fontFamily: 'Courier New, monospace', resize: 'vertical' }}
-          placeholder={'MH20EE7602\nDL1CAB0001'} />
+          style={{ ...inputStyle, fontFamily: 'SF Mono, monospace', resize: 'none' }}
+          className="focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500"
+          placeholder={'ABC-1234\nXYZ-9999'} />
       </div>
       <div>
-        <label style={labelStyle}>Notes</label>
+        <label style={labelStyle}>Administrative Notes</label>
         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-          style={{ ...inputStyle, resize: 'vertical' }} placeholder="Optional notes…" />
+          style={{ ...inputStyle, resize: 'none' }} 
+          className="focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500"
+          placeholder="Optional background details…" />
       </div>
       <div className="flex gap-3 pt-2">
-        <button onClick={submit}
-          className="flex-1 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
-          style={{ background: '#2563eb' }}>
-          {initial?.id ? 'Update Person' : 'Register Person'}
+        <button onClick={submit} className="btn-apple flex-1">
+          {initial?.id ? 'Save Changes' : 'Register Person'}
         </button>
         <button onClick={onCancel}
-          className="px-4 rounded-lg text-sm transition-colors"
-          style={{ background: '#0c1528', border: '1px solid #1a2744', color: '#64748b' }}>
+          className="px-6 rounded-xl text-sm font-semibold transition-all hover:bg-slate-100"
+          style={{ color: '#8E8E93' }}>
           Cancel
         </button>
       </div>
@@ -73,55 +91,49 @@ function PersonCard({ person, onEdit, onDelete, onView, onEnrollFace }: {
   person: Person; onEdit: () => void; onDelete: () => void; onView: () => void; onEnrollFace: () => void
 }) {
   return (
-    <div className="rounded-xl p-5 transition-all group"
-      style={{ background: '#0c1528', border: '1px solid #1a2744' }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = '#1e3a5f')}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = '#1a2744')}>
-      <div className="flex items-start gap-4 mb-4">
-        <div className="w-16 h-16 rounded-xl flex-shrink-0 overflow-hidden flex items-center justify-center relative cursor-pointer"
-          style={{ background: '#070e1c', border: '1px solid #1a2744' }}
+    <div style={appleCard} className="p-5 flex flex-col group hover:scale-[1.01]">
+      <div className="flex items-start gap-4 flex-1">
+        <div className="w-20 h-20 rounded-[22px] flex-shrink-0 overflow-hidden flex items-center justify-center relative cursor-pointer shadow-inner bg-[#F2F2F7] border border-slate-100"
           onClick={onEnrollFace}>
           {(person as any).faceThumbnail ? (
             <img src={`data:image/jpeg;base64,${(person as any).faceThumbnail}`} alt={person.name}
-              className="w-full h-full object-cover" />
+              className="w-full h-full object-cover transition-transform group-hover:scale-105" />
           ) : (
-            <User size={22} style={{ color: '#1e3358' }} />
+            <User size={28} className="text-slate-300" strokeWidth={1.5} />
           )}
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-            style={{ background: 'rgba(37,99,235,0.7)' }}>
-            <Camera size={16} className="text-white" />
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-300 backdrop-blur-[2px]"
+            style={{ background: 'rgba(0,122,255,0.7)' }}>
+            <Camera size={20} className="text-white drop-shadow-md" />
           </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-bold text-slate-100 truncate">{person.name}</h3>
-            <div className="flex gap-0.5 flex-shrink-0">
-              <button onClick={onEdit}
-                className="p-1.5 rounded-lg transition-colors text-slate-600 hover:text-blue-400 hover:bg-blue-950/40">
-                <Pencil size={13} />
-              </button>
-              <button onClick={onDelete}
-                className="p-1.5 rounded-lg transition-colors text-slate-600 hover:text-red-400 hover:bg-red-950/30">
-                <Trash2 size={13} />
-              </button>
+        
+        <div className="flex-1 min-w-0 pt-1">
+          <div className="flex items-start justify-between">
+            <h3 className="font-bold text-base tracking-tight text-[#1D1D1F] truncate">{person.name}</h3>
+            <div className="flex gap-1">
+               <button onClick={onEdit} className="p-1.5 rounded-lg text-slate-300 hover:text-[#007AFF] hover:bg-blue-50 transition-all">
+                 <Pencil size={14} />
+               </button>
+               <button onClick={onDelete} className="p-1.5 rounded-lg text-slate-300 hover:text-[#FF3B30] hover:bg-red-50 transition-all">
+                 <Trash2 size={14} />
+               </button>
             </div>
           </div>
-          {person.notes && <p className="text-xs text-slate-600 mt-1 line-clamp-2">{person.notes}</p>}
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
+            {person.plateNumbers.map(p => <span key={p} className="plate-badge text-[10px] py-0.5 px-2">{p}</span>)}
+          </div>
+          {person.notes && <p className="text-[11px] text-slate-400 mt-2 line-clamp-1 italic font-medium">"{person.notes}"</p>}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {person.plateNumbers.map(p => <span key={p} className="plate-badge text-xs">{p}</span>)}
-      </div>
-
-      <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid #0f1e38' }}>
-        <p className="text-xs flex items-center gap-1" style={{ color: '#1e3358' }}>
-          <Clock size={10} />
-          {new Date(person.createdAt).toLocaleDateString()}
-        </p>
+      <div className="flex items-center justify-between pt-4 mt-4" style={{ borderTop: '1px solid rgba(60,60,67,0.06)' }}>
+        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+           <Clock size={10} />
+           {new Date(person.createdAt).toLocaleDateString()}
+        </div>
         <button onClick={onView}
-          className="text-xs font-semibold flex items-center gap-1.5 transition-colors text-slate-600 hover:text-blue-400">
-          <Car size={12} />View history
+          className="text-xs font-bold text-[#007AFF] flex items-center gap-1 hover:gap-2 transition-all">
+          Activity <ChevronRight size={14} strokeWidth={2.5} />
         </button>
       </div>
     </div>
@@ -150,7 +162,7 @@ export default function PersonsPage() {
       const fd = new FormData()
       fd.append('image', file)
       await api.enrollFace(enrollId, fd)
-      toast('Face enrolled successfully', 'success')
+      toast('Face biometric profile updated', 'success')
       mutate()
     } catch (e: any) { toast(e.message, 'error') }
     finally { setEnrollId(null); e.target.value = '' }
@@ -162,19 +174,19 @@ export default function PersonsPage() {
   )
 
   const create = async (data: any) => {
-    try { await api.createPerson(data); toast('Person registered', 'success'); mutate(); setAddOpen(false) }
+    try { await api.createPerson(data); toast('Person registered successfully', 'success'); mutate(); setAddOpen(false) }
     catch (e: any) { toast(e.message, 'error') }
   }
 
   const update = async (data: any) => {
     if (!editPerson) return
-    try { await api.updatePerson(editPerson.id, data); toast('Person updated', 'success'); mutate(); setEditPerson(null) }
+    try { await api.updatePerson(editPerson.id, data); toast('Profile updated', 'success'); mutate(); setEditPerson(null) }
     catch (e: any) { toast(e.message, 'error') }
   }
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this person?')) return
-    try { await api.deletePerson(id); toast('Deleted', 'info'); mutate() }
+    if (!confirm('Are you sure you want to delete this person? This cannot be undone.')) return
+    try { await api.deletePerson(id); toast('Registry entry removed', 'info'); mutate() }
     catch (e: any) { toast(e.message, 'error') }
   }
 
@@ -184,84 +196,99 @@ export default function PersonsPage() {
   }
 
   return (
-    <>
-      <TopBar title="Persons" subtitle={`${persons.length} registered`} connected={false} />
-      <main className="flex-1 p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5"
-            style={{ background: '#0c1528', border: '1px solid #1a2744' }}>
-            <Search size={14} className="text-slate-600" />
+    <div className="min-h-screen bg-[#F2F2F7]">
+      <TopBar title="Biometric Registry" subtitle={`${persons.length} active profiles`} connected={false} />
+      
+      <main className="flex-1 p-6 max-w-6xl mx-auto space-y-6">
+        
+        {/* Action Header */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="relative flex-1 w-full">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+              <Search size={16} strokeWidth={2.5} />
+            </div>
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name or plate…"
-              className="text-sm outline-none flex-1 bg-transparent text-slate-200 placeholder-slate-700" />
+              placeholder="Search by name, plate number..."
+              className="w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium border border-white bg-white/60 backdrop-blur-sm shadow-sm focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all outline-none" />
           </div>
-          <button onClick={() => setAddOpen(true)}
-            className="flex items-center gap-2 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-            style={{ background: '#2563eb' }}>
-            <Plus size={16} />Register Person
+          <button onClick={() => setAddOpen(true)} className="btn-apple h-[46px] px-6 flex items-center gap-2 whitespace-nowrap shadow-md">
+            <Plus size={18} strokeWidth={2.5} />
+            Add Profile
           </button>
         </div>
 
-        {filtered.length === 0
-          ? <div className="rounded-xl py-24 text-center"
-              style={{ background: '#0c1528', border: '1px solid #1a2744' }}>
-              <Users size={40} className="mx-auto mb-4" style={{ color: '#1a2744' }} />
-              <p className="text-slate-600 font-medium">No persons registered</p>
-              <button onClick={() => setAddOpen(true)}
-                className="mt-3 text-sm font-semibold transition-colors text-blue-500 hover:text-blue-400">
-                Register the first person →
-              </button>
+        {filtered.length === 0 ? (
+          <div className="rounded-[32px] py-32 text-center bg-white shadow-sm border border-slate-100 animate-in zoom-in-95 duration-500">
+            <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-6">
+               <Users size={32} className="text-slate-200" strokeWidth={1.5} />
             </div>
-          : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map(p => (
-                <PersonCard key={p.id} person={p}
-                  onEdit={() => setEditPerson(p)}
-                  onDelete={() => remove(p.id)}
-                  onView={() => viewHistory(p)}
-                  onEnrollFace={() => handleEnroll(p.id)} />
-              ))}
-              <input id="enroll-input" type="file" accept="image/*" className="hidden" onChange={uploadFace} />
-            </div>}
+            <p className="text-lg font-bold text-slate-800">Registry Empty</p>
+            <p className="text-sm text-slate-400 mt-1 max-w-[240px] mx-auto">No matching profiles found in the database.</p>
+            <button onClick={() => setAddOpen(true)} className="mt-6 text-sm font-bold text-[#007AFF] hover:underline">
+              Register first person
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {filtered.map(p => (
+              <PersonCard key={p.id} person={p}
+                onEdit={() => setEditPerson(p)}
+                onDelete={() => remove(p.id)}
+                onView={() => viewHistory(p)}
+                onEnrollFace={() => handleEnroll(p.id)} />
+            ))}
+            <input id="enroll-input" type="file" accept="image/*" className="hidden" onChange={uploadFace} />
+          </div>
+        )}
       </main>
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Register Person">
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="New Profile Registration">
         <PersonForm onSave={create} onCancel={() => setAddOpen(false)} />
       </Modal>
 
-      <Modal open={!!editPerson} onClose={() => setEditPerson(null)} title="Edit Person">
+      <Modal open={!!editPerson} onClose={() => setEditPerson(null)} title="Update Profile Details">
         {editPerson && <PersonForm initial={editPerson} onSave={update} onCancel={() => setEditPerson(null)} />}
       </Modal>
 
-      <Modal open={!!viewPerson} onClose={() => setViewPerson(null)} title={`${viewPerson?.name} — Visit History`} width="max-w-2xl">
+      <Modal open={!!viewPerson} onClose={() => setViewPerson(null)} title={`${viewPerson?.name} Activity`} width="max-w-2xl">
         {viewPerson && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-1.5">
-              {viewPerson.plateNumbers?.map((p: string) => <span key={p} className="plate-badge">{p}</span>)}
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2 pb-4 border-b border-slate-50">
+              {viewPerson.plateNumbers?.map((p: string) => <span key={p} className="plate-badge text-[11px] px-3 py-1">{p}</span>)}
             </div>
-            {(!viewPerson.visits || viewPerson.visits.length === 0)
-              ? <p className="text-slate-600 text-sm text-center py-10">No visits recorded yet</p>
-              : <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {viewPerson.visits.map((v: any) => (
-                    <div key={v.id} className="flex items-center gap-3 p-3 rounded-lg"
-                      style={{ background: '#080f1e', border: '1px solid #1a2744' }}>
-                      {v.thumbnailBase64 && (
-                        <img src={`data:image/jpeg;base64,${v.thumbnailBase64}`} alt={v.plateText}
-                          className="w-14 h-8 object-cover rounded"
-                          style={{ border: '1px solid #1a2744' }} />
-                      )}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="plate-badge text-xs">{v.plateText}</span>
-                          <span className="text-xs font-bold" style={{ color: '#64748b' }}>{Math.round(v.confidence * 100)}%</span>
+            
+            <div className="space-y-3">
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Detection Log</p>
+               {(!viewPerson.visits || viewPerson.visits.length === 0) ? (
+                 <div className="py-20 text-center bg-slate-50/50 rounded-[24px] border border-dashed border-slate-200">
+                    <Clock size={24} className="mx-auto mb-3 text-slate-200" />
+                    <p className="text-xs font-bold text-slate-400">No events logged yet</p>
+                 </div>
+               ) : (
+                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                    {viewPerson.visits.map((v: any) => (
+                      <div key={v.id} style={appleCard} className="flex items-center gap-4 p-3 border border-slate-50">
+                        {v.thumbnailBase64 && (
+                          <img src={`data:image/jpeg;base64,${v.thumbnailBase64}`} alt={v.plateText}
+                            className="w-20 h-11 object-cover rounded-xl shadow-sm" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="plate-badge text-[10px]">{v.plateText}</span>
+                            <span className="text-[11px] font-bold text-[#30D158]">{Math.round(v.confidence * 100)}%</span>
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">
+                             {new Date(v.timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                          </p>
                         </div>
                       </div>
-                      <p className="text-xs font-mono" style={{ color: '#334155' }}>{new Date(v.timestamp).toLocaleString()}</p>
-                    </div>
-                  ))}
-                </div>}
+                    ))}
+                 </div>
+               )}
+            </div>
           </div>
         )}
       </Modal>
-    </>
+    </div>
   )
 }
