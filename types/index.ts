@@ -2,6 +2,15 @@ export interface BoundingBox {
   x: number; y: number; width: number; height: number; rotation: number
 }
 
+export interface VehicleInfo {
+  make?: string
+  model?: string
+  color?: string
+  thumbnail?: string
+  confidence: number
+  boundingBox: BoundingBox
+}
+
 export interface PlateResult {
   text: string
   confidence: number
@@ -11,6 +20,11 @@ export interface PlateResult {
   region?: string
   state?: string
   personName?: string
+  vehicleMake?: string
+  vehicleModel?: string
+  vehicleColor?: string
+  vehicleThumbnail?: string
+  direction?: 'left' | 'right' | 'stationary'
 }
 
 export interface FaceResult {
@@ -21,6 +35,9 @@ export interface FaceResult {
   personId?: string
   personName?: string
   similarity?: number
+  spoofScore?: number
+  spoofDetected?: boolean
+  occluded?: boolean
 }
 
 export interface DetectionResult {
@@ -28,24 +45,52 @@ export interface DetectionResult {
   count: number
   plates: PlateResult[]
   faces: FaceResult[]
+  vehicles: VehicleInfo[]
   processingTimeMs: number
+  gunDetected: boolean
 }
 
 export interface CombinedResult {
   frameIndex: number
   plates: PlateResult[]
   faces: FaceResult[]
+  vehicles: VehicleInfo[]
   processingTimeMs: number
+  gunDetected: boolean
 }
 
 export interface DetectionEvent {
   id: string
   plateText: string
   confidence: number
-  source: 'image' | 'video' | 'stream'
+  source: 'image' | 'video' | 'stream' | 'camera'
   personId?: string
   personName?: string
   thumbnailBase64?: string
+  vehicleMake?: string
+  vehicleModel?: string
+  vehicleColor?: string
+  direction?: 'left' | 'right' | 'stationary'
+  cameraId?: string
+  cameraName?: string
+  gunDetected?: boolean
+  x: number; y: number; width: number; height: number
+  timestamp: string
+}
+
+export interface FaceEvent {
+  id: string
+  personId?: string
+  personName?: string
+  confidence: number
+  quality: number
+  spoofScore?: number
+  spoofDetected: boolean
+  occluded: boolean
+  thumbnailBase64?: string
+  cameraId?: string
+  cameraName?: string
+  detectionEventId?: string
   x: number; y: number; width: number; height: number
   timestamp: string
 }
@@ -76,6 +121,20 @@ export interface Alert {
   thumbnailBase64?: string
   acknowledged: boolean
   timestamp: string
+}
+
+export interface Camera {
+  id: string
+  name: string
+  url: string
+  region: string
+  frameStep: number
+  active: boolean
+  notes?: string
+  roiInclude?: { x: number; y: number; width: number; height: number }[]
+  roiExclude?: { x: number; y: number; width: number; height: number }[]
+  createdAt: string
+  streaming?: boolean
 }
 
 export interface HealthStatus {

@@ -33,6 +33,8 @@ export const api = {
   getStats: (days = 7) => req<any[]>(`/events/stats?days=${days}`),
   getTopPlates: (limit = 10) => req<any[]>(`/events/top-plates?limit=${limit}`),
   getTopPersons: (limit = 10) => req<any[]>(`/events/top-persons?limit=${limit}`),
+  getVehicleStats: (days = 30) => req<{ makes: any[]; colors: any[] }>(`/events/vehicle-stats?days=${days}`),
+  getSourceBreakdown: (days = 7) => req<any[]>(`/events/source-breakdown?days=${days}`),
   deleteEvent: (id: string) => fetch(`${BASE}/events/${id}`, { method: 'DELETE' }),
 
   // Persons
@@ -57,4 +59,15 @@ export const api = {
   acknowledgeAlert: (id: string) =>
     req<any>(`/alerts/${id}/acknowledge`, { method: 'PATCH' }),
   deleteAlert: (id: string) => fetch(`${BASE}/alerts/${id}`, { method: 'DELETE' }),
+
+  // Cameras
+  getCameras: () => req<any[]>('/cameras'),
+  getCamera: (id: string) => req<any>(`/cameras/${id}`),
+  createCamera: (body: unknown) => req<any>('/cameras', { method: 'POST', ...json(body) }),
+  updateCamera: (id: string, body: unknown) => req<any>(`/cameras/${id}`, { method: 'PATCH', ...json(body) }),
+  deleteCamera: (id: string) => fetch(`${BASE}/cameras/${id}`, { method: 'DELETE' }),
+
+  // Face Events
+  getFaceEvents: (params?: Record<string, string>) =>
+    req<{ total: number; data: any[] }>(`/face-events?${new URLSearchParams(params ?? {})}`),
 }

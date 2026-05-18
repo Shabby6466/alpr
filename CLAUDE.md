@@ -56,13 +56,21 @@ alpr-frontend/
 ## Shared Types (`types/index.ts`)
 
 ```typescript
-PlateResult       // text, confidence, quality, boundingBox, thumbnail?, region?, state?, personId?, personName?
-DetectionResult   // success, count, plates, processingTimeMs
-DetectionEvent    // id, plateText, confidence, source, personId?, personName?, thumbnailBase64?, x/y/width/height, timestamp
+PlateResult       // text, confidence, quality, boundingBox, thumbnail?, region?, state?,
+                  // personId?, personName?, vehicleMake?, vehicleModel?, vehicleColor?,
+                  // vehicleThumbnail?, direction?
+FaceResult        // boundingBox, confidence, quality, spoofScore?, spoofDetected?,
+                  // occluded?, personId?, personName?, thumbnail?
+VehicleResult     // make?, model?, color?, confidence, boundingBox, thumbnail?
+DetectionResult   // success, count, plates, faces, vehicles, processingTimeMs, gunDetected
+DetectionEvent    // id, plateText, confidence, source, personId?, personName?,
+                  // thumbnailBase64?, x/y/width/height, vehicleMake?, vehicleModel?,
+                  // vehicleColor?, vehicleThumbnail?, direction?, cameraId?, cameraName?,
+                  // gunDetected, timestamp
 Person            // id, name, plateNumbers[], notes?, createdAt, visits?
 WatchlistEntry    // id, plateText, reason?, active, createdAt
 Alert             // id, plateText, watchlistEntryId, detectionEventId, reason?, thumbnailBase64?, acknowledged, timestamp
-HealthStatus      // status, rocInitialized, modelPath, error?
+HealthStatus      // status, rocInitialized, modelPath, capabilities: { lpr, face, vehicle, gun }, error?
 ```
 
 ## API Client (`lib/api.ts`)
@@ -71,9 +79,10 @@ All backend calls go through the `api` object. Throws `Error` with the server's 
 
 ```typescript
 api.health()
-api.detect(formData, params?)          // POST /api/alpr/detect
+api.detect(formData, params?)          // POST /api/alpr/detect — params includes sessionId?
 api.detectUrl(body)                    // POST /api/alpr/detect-url
 api.detectStream(body)                 // POST /api/alpr/detect-stream (returns native Response for SSE)
+api.flushSession(sessionId)            // POST /api/alpr/sessions/:sessionId/flush
 api.getEvents(params?)                 // GET  /api/events
 api.deleteEvent(id)
 api.getPersons()
@@ -111,9 +120,20 @@ Used in: `layout.tsx` (alert count), `page.tsx` (dashboard feed + alerts), `even
 - Active alerts panel: SSE at `/api/alerts/stream` + SWR poll every 10s.
 
 ### Detection (`/detect`)
-- **Image tab**: drag-drop zone or click-to-upload. Region selector (North American / European / Pacific). Shows plate cards with thumbnail, confidence badge, bounding box, person match.
-- **Video tab**: file upload, streams SSE response from `POST /api/alpr/detect-video`. Results appear per-frame as they arrive. Shows unique plate count on completion. Max size 1GB.
-- **Live Feed tab**: RTSP/HTTP stream URL input. Monitoring for plates in real-time. Shows scrollable "Recent Detections" list (last 50 frames). Automatically handles timestamp synchronization.
+- **Image tab**: drag-drop zone or click-to-upload. Region selector. Shows plate cards with thumbnail, confidence badge, bounding box overlay, person match, vehicle info.
+- **Video tab**: client-side frame capture (not server-side SSE video upload).
+  - On start: generates a UUID `sessionId` via `crypto.randomUUID()` stored in `sessionIdRef`.
+  - Each frame captured from `<video>` element → canvas → JPEG blob → `POST /api/alpr/detect?sessionId=<uuid>&thumbnail=true`.
+  - Backend accumulates plates into `VehicleTracker` per session — no DB writes yet.
+  - On stop or `onEnded`: calls `POST /api/alpr/sessions/:sessionId/flush` → commits one best reading per tracked vehicle to DB + SSE.
+  - Detection feed cards show plate text, confidence, plate thumbnail (base64 JPEG), face thumbnail.
+  - `thumbnail=true` is always sent so the feed always has plate crop images.
+- **Live Feed tab**: RTSP/HTTP stream URL input. Monitoring for plates in real-time. Shows scrollable "Recent Detections" list (last 50 frames).
+
+### Region selector
+- **North American / Pakistan ★** (`NORTH_AMERICAN`) — correct region for Pakistani plates. Labeled with ★ to guide users.
+- **Asian (East Asia)** (`ASIAN`) — East Asian plate formats only (Chinese/Japanese/Korean). **Do not use for Pakistani plates.**
+- Region order in selector: North American, European, Middle Eastern, Asian, Pacific, African, South American.
 
 ### Events Log (`/events`)
 - Table: thumbnail, plate badge, confidence badge (green ≥90%, amber ≥70%, red <70%), person name, source badge, timestamp.

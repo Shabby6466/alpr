@@ -6,7 +6,7 @@ import { useSSE } from '@/lib/useSSE'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { DetectionEvent } from '@/types'
-import { Search, Trash2, ChevronLeft, ChevronRight, Car, SlidersHorizontal, X, Clock, Video, Camera, User } from 'lucide-react'
+import { Search, Trash2, ChevronLeft, ChevronRight, Car, X, Clock, Video, Camera, User, Wifi, Image, AlertTriangle, ArrowLeft, ArrowRight, Minus } from 'lucide-react'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -14,6 +14,13 @@ const appleCard = {
   background: '#FFFFFF',
   borderRadius: 16,
   boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)',
+}
+
+const SOURCE_META: Record<string, { label: string; icon: typeof Camera; color: string }> = {
+  image:  { label: 'Image',  icon: Image,  color: '#5856D6' },
+  video:  { label: 'Video',  icon: Video,  color: '#FF9500' },
+  stream: { label: 'Stream', icon: Wifi,   color: '#007AFF' },
+  camera: { label: 'Camera', icon: Camera, color: '#30D158' },
 }
 
 function ConfBadge({ v }: { v: number }) {
@@ -31,20 +38,43 @@ function ConfBadge({ v }: { v: number }) {
   )
 }
 
+function DirectionIcon({ dir }: { dir?: string }) {
+  if (dir === 'left')  return <ArrowLeft  size={12} className="text-[#007AFF]" />
+  if (dir === 'right') return <ArrowRight size={12} className="text-[#30D158]" />
+  return <Minus size={12} className="text-slate-300" />
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const meta = SOURCE_META[source] ?? SOURCE_META.image
+  const Icon = meta.icon
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon size={12} style={{ color: meta.color }} />
+      <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: meta.color }}>
+        {meta.label}
+      </span>
+    </div>
+  )
+}
+
 export default function EventsPage() {
   const { toast } = useToast()
   const [plate, setPlate] = useState('')
   const [source, setSource] = useState('')
   const [page, setPage] = useState(0)
-  const [newEvents, setNewEvents] = useState<DetectionEvent[]>([])
+  const [newCount, setNewCount] = useState(0)
   const limit = 25
 
-  const qs = new URLSearchParams({ limit: String(limit), offset: String(page * limit), ...(plate && { plate }), ...(source && { source }) }).toString()
+  const qs = new URLSearchParams({
+    limit: String(limit),
+    offset: String(page * limit),
+    ...(plate && { plate }),
+    ...(source && { source }),
+  }).toString()
   const { data, mutate } = useSWR(`/api/events?${qs}`, fetcher, { refreshInterval: 0 })
 
-  const { connected } = useSSE<DetectionEvent>('/api/events/stream', (ev) => {
-    setNewEvents(p => [ev, ...p].slice(0, 5))
-    mutate()
+  const { connected } = useSSE<DetectionEvent>('/api/events/stream', () => {
+    setNewCount(n => n + 1)
   })
 
   const del = async (id: string) => {
@@ -74,10 +104,16 @@ export default function EventsPage() {
           </div>
 
           <div className="flex p-1 bg-[#F2F2F7] rounded-xl">
-            {['', 'image', 'video'].map(s => (
-              <button key={s} onClick={() => { setSource(s); setPage(0) }}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${source === s ? 'bg-white text-[#007AFF] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                {s === '' ? 'All' : s === 'image' ? 'Photos' : 'Video'}
+            {[
+              { key: '', label: 'All' },
+              { key: 'camera', label: 'Camera' },
+              { key: 'stream', label: 'Stream' },
+              { key: 'video', label: 'Video' },
+              { key: 'image', label: 'Image' },
+            ].map(s => (
+              <button key={s.key} onClick={() => { setSource(s.key); setPage(0) }}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${source === s.key ? 'bg-white text-[#007AFF] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                {s.label}
               </button>
             ))}
           </div>
@@ -90,19 +126,18 @@ export default function EventsPage() {
           )}
 
           <div className="ml-auto flex items-center gap-2 text-[11px] font-black text-slate-300 uppercase tracking-widest">
-            <SlidersHorizontal size={13} />
             <span>{total} Total</span>
           </div>
         </div>
 
         {/* Live Notification Banner */}
-        {newEvents.length > 0 && (
+        {newCount > 0 && (
           <div className="rounded-2xl px-5 py-3 flex items-center gap-4 bg-blue-50 border border-blue-100 animate-in slide-in-from-top-4 duration-500">
             <div className="live-ring" style={{ width: 10, height: 10 }} />
             <span className="text-sm text-blue-900 font-bold tracking-tight">
-              {newEvents.length} new detection{newEvents.length > 1 ? 's' : ''} available
+              {newCount} new detection{newCount > 1 ? 's' : ''} available
             </span>
-            <button onClick={() => { setNewEvents([]); mutate() }}
+            <button onClick={() => { setNewCount(0); mutate() }}
               className="ml-auto text-xs font-black text-[#007AFF] uppercase tracking-wider hover:underline">
               Refresh View
             </button>
@@ -114,8 +149,8 @@ export default function EventsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                {['Detections', 'Result', 'Precision', 'Identity', 'Source', 'Logged At', ''].map(h => (
-                  <th key={h} className="text-left px-5 py-4 text-[10px] font-black tracking-widest uppercase text-slate-400">
+                {['Thumbnail', 'Plate', 'Confidence', 'Vehicle', 'Identity', 'Direction', 'Source', 'Logged At', ''].map(h => (
+                  <th key={h} className="text-left px-4 py-4 text-[10px] font-black tracking-widest uppercase text-slate-400">
                     {h}
                   </th>
                 ))}
@@ -124,7 +159,7 @@ export default function EventsPage() {
             <tbody className="divide-y divide-slate-50">
               {events.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-24 text-center">
+                  <td colSpan={9} className="py-24 text-center">
                     <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4">
                       <Clock size={28} className="text-slate-200" strokeWidth={1.5} />
                     </div>
@@ -134,39 +169,69 @@ export default function EventsPage() {
               )}
               {events.map((ev) => (
                 <tr key={ev.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-5 py-3">
-                    {ev.thumbnailBase64
-                      ? <img src={`data:image/jpeg;base64,${ev.thumbnailBase64}`} alt={ev.plateText}
-                        className="w-20 h-11 object-cover rounded-xl shadow-sm border border-white" />
-                      : <div className="w-20 h-11 rounded-xl flex items-center justify-center bg-slate-50 border border-slate-100">
-                        <Car size={16} className="text-slate-200" />
-                      </div>}
+                  {/* Thumbnail */}
+                  <td className="px-4 py-3">
+                    <div className="relative">
+                      {ev.thumbnailBase64
+                        ? <img src={`data:image/jpeg;base64,${ev.thumbnailBase64}`} alt={ev.plateText}
+                          className="w-20 h-11 object-cover rounded-xl shadow-sm border border-white" />
+                        : <div className="w-20 h-11 rounded-xl flex items-center justify-center bg-slate-50 border border-slate-100">
+                          <Car size={16} className="text-slate-200" />
+                        </div>}
+                      {ev.gunDetected && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#FF3B30] rounded-full flex items-center justify-center">
+                          <AlertTriangle size={8} className="text-white" strokeWidth={3} />
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-5 py-3">
+                  {/* Plate */}
+                  <td className="px-4 py-3">
                     <span className="plate-badge text-[11px] font-bold">{ev.plateText}</span>
                   </td>
-                  <td className="px-5 py-3">
+                  {/* Confidence */}
+                  <td className="px-4 py-3">
                     <ConfBadge v={ev.confidence} />
                   </td>
-                  <td className="px-5 py-3">
+                  {/* Vehicle */}
+                  <td className="px-4 py-3">
+                    {ev.vehicleMake ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-bold text-slate-700 capitalize">
+                          {[ev.vehicleMake, ev.vehicleModel].filter(Boolean).join(' ')}
+                        </span>
+                        {ev.vehicleColor && (
+                          <span className="text-[10px] font-bold text-slate-400 capitalize">{ev.vehicleColor}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-300">—</span>
+                    )}
+                  </td>
+                  {/* Identity */}
+                  <td className="px-4 py-3">
                     {ev.personName ? (
                       <div className="flex items-center gap-2 text-blue-600 font-bold text-xs">
                         <User size={13} fill="currentColor" className="opacity-20" />
                         {ev.personName}
                       </div>
                     ) : (
-                      <span className="text-[11px] font-bold text-slate-300 uppercase tracking-tighter">Unidentified</span>
+                      <span className="text-[11px] font-bold text-slate-300 uppercase tracking-tighter">Unknown</span>
                     )}
                   </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      {ev.source === 'video' ? <Video size={13} className="text-indigo-400" /> : <Camera size={13} className="text-slate-400" />}
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${ev.source === 'video' ? 'text-indigo-500' : 'text-slate-400'}`}>
-                        {ev.source}
-                      </span>
-                    </div>
+                  {/* Direction */}
+                  <td className="px-4 py-3">
+                    <DirectionIcon dir={ev.direction} />
                   </td>
-                  <td className="px-5 py-3">
+                  {/* Source */}
+                  <td className="px-4 py-3">
+                    <SourceBadge source={ev.source} />
+                    {ev.cameraName && (
+                      <p className="text-[9px] text-slate-300 mt-0.5 truncate max-w-[80px]">{ev.cameraName}</p>
+                    )}
+                  </td>
+                  {/* Timestamp */}
+                  <td className="px-4 py-3">
                     <div className="flex flex-col">
                       <span className="text-[11px] font-bold text-slate-800">
                         {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -176,7 +241,8 @@ export default function EventsPage() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  {/* Delete */}
+                  <td className="px-4 py-3 text-right">
                     <button onClick={() => del(ev.id)}
                       className="p-2 rounded-lg text-slate-200 hover:text-[#FF3B30] hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100">
                       <Trash2 size={15} />
@@ -188,7 +254,7 @@ export default function EventsPage() {
           </table>
         </div>
 
-        {/* Pagination Pill */}
+        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-2">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
@@ -199,9 +265,7 @@ export default function EventsPage() {
                 className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 disabled:opacity-20 transition-all">
                 <ChevronLeft size={18} strokeWidth={2.5} />
               </button>
-              <div className="px-3 text-xs font-black text-slate-800">
-                {page + 1}
-              </div>
+              <div className="px-3 text-xs font-black text-slate-800">{page + 1}</div>
               <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 disabled:opacity-20 transition-all">
                 <ChevronRight size={18} strokeWidth={2.5} />
