@@ -138,32 +138,38 @@ Used in: `layout.tsx` (alert count), `page.tsx` (dashboard feed + alerts), `even
 - "Show acknowledged" toggle changes SWR key (omits `?acknowledged=false`).
 - SSE live counter banner; click to refresh.
 
-## Styling Conventions
+## Apple Design Language Guidelines
 
-- **`.plate-badge`** (in `globals.css`): monospace font, yellow-50 background, yellow-300 border, rounded, small padding. Used universally for displaying plate numbers.
-- **`.pulse-dot`**: CSS keyframe animation on a small circle — indicates live connection.
-- Tailwind: no config file — using v4's CSS-first config. No `tailwind.config.js` exists.
-- Color language: blue = detection/primary actions; amber = watchlist; red = alerts; violet = video; green = success/acknowledged.
+The frontend follows a premium, high-fidelity Apple-inspired design language. Adhere to these patterns for all new UI work:
 
-## Layout Architecture
+### Visual Principles
+- **Cleanliness**: Use white backgrounds with extremely soft, layered shadows (`box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)`).
+- **Glassmorphism**: Use translucent backgrounds for persistent UI (Sidebar, TopBar, Modals) with `backdrop-filter: blur(20px) saturate(180%)`.
+- **Softness**: Standard border radius is `16px` for cards, `12px` for inputs/pills, and `24px` for modals.
+- **High Contrast**: Use deep blacks (`#1D1D1F`) for primary text and system gray (`#8E8E93`) for secondary.
 
-`layout.tsx` is `'use client'` (required for SSE and useState). The `AppShell` component:
-- Renders the fixed `Sidebar` (240px) and a `flex-col` main area with `ml-[240px]`.
-- Seeds the initial unacknowledged alert count from `GET /api/alerts?acknowledged=false` on mount.
-- Increments alert count via SSE `/api/alerts/stream` for real-time badge updates.
-- Wraps everything in `ToastProvider`.
+### Color Palette (System Colors)
+- **Primary Blue**: `#007AFF` (Primary actions, active states)
+- **System Green**: `#30D158` (Success, resolved, low-priority)
+- **System Red**: `#FF3B30` (Alerts, errors, high-priority)
+- **System Orange**: `#FF9500` (Watchlist, warnings, medium-priority)
+- **System Background**: `#F2F2F7` (Main page background)
 
-## Data Flow Pattern
+### Typography
+- **Font**: San Francisco (SF Pro) / System Default.
+- **Tracking**: Use slightly negative tracking for headings (`letter-spacing: -0.015em`).
+- **Data**: Use `font-mono` and `tabular-nums` for timestamps, IDs, and confidence scores.
+- **Badges**: Use `text-[10px]` or `text-[11px]` with `font-black` and `uppercase` for status indicators.
 
-All pages follow the same pattern:
-1. `useSWR('/api/...')` for initial data load and background refresh.
-2. `api.*()` calls for mutations, wrapped in try/catch that calls `toast(e.message, 'error')`.
-3. `mutate()` after every successful mutation to revalidate SWR cache.
-4. `useSSE()` where real-time updates are needed — updates local state and/or calls `mutate()`.
+### UI Components
+- **Sidebar**: Fixed 240px width, `rgba(246,246,246,0.88)` background, blurred.
+- **TopBar**: 56px height, translucent white, refined 1px bottom border.
+- **Apple Card**: White background, soft shadow, `p-5` padding.
+- **Segmented Control**: Apple-style tabs with a white pill sliding over a gray background.
+- **Buttons**: `.btn-apple` for primary actions (Blue background, white text, bold).
 
-## Known Constraints
-
-- `layout.tsx` uses `'use client'` — there is no RSC data fetching. All data is client-side.
-- Video/Stream detection SSE (`/api/alpr/detect-video` and `/detect-stream`) are consumed with a manual `ReadableStream` reader, not `EventSource`, because they are `POST` requests.
-- Next.js 16 / React 19 — some third-party libraries may not be compatible. Check peer deps before adding packages.
-- The workspace-root warning about multiple lockfiles (`/Users/Akmal/package-lock.json` vs this project's) is cosmetic and does not affect functionality.
+### Animations
+- **`sfPulse`**: Subtle opacity pulse (2s) for live status dots.
+- **`sfPing`**: Scaled ring animation for critical alerts.
+- **Transitions**: Use `animate-in fade-in slide-in-from-bottom-4` for new content appearing.
+- **Hover States**: Subtle scale-up (`hover:scale-[1.01]`) or background shift (`hover:bg-slate-50/50`).

@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Camera, List, Users, ShieldAlert, Bell, ScanLine } from 'lucide-react'
+import { LayoutDashboard, Camera, List, Users, ShieldAlert, Bell, ScanLine, BarChart3 } from 'lucide-react'
 
 const nav = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -10,6 +10,7 @@ const nav = [
   { href: '/persons', icon: Users, label: 'Persons' },
   { href: '/watchlist', icon: ShieldAlert, label: 'Watchlist' },
   { href: '/alerts', icon: Bell, label: 'Alerts' },
+  { href: '/reports', icon: BarChart3, label: 'Reports' },
 ]
 
 export default function Sidebar({ alertCount }: { alertCount: number }) {

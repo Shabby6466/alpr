@@ -27,9 +27,12 @@ export const api = {
   detectStream: (body: Record<string, unknown>) =>
     fetch(`${BASE}/alpr/detect-stream`, { method: 'POST', ...json(body) }),
 
-  // Events
+  // Events & Reporting
   getEvents: (params?: Record<string, string>) =>
     req<{ total: number; data: any[] }>(`/events?${new URLSearchParams(params ?? {})}`),
+  getStats: (days = 7) => req<any[]>(`/events/stats?days=${days}`),
+  getTopPlates: (limit = 10) => req<any[]>(`/events/top-plates?limit=${limit}`),
+  getTopPersons: (limit = 10) => req<any[]>(`/events/top-persons?limit=${limit}`),
   deleteEvent: (id: string) => fetch(`${BASE}/events/${id}`, { method: 'DELETE' }),
 
   // Persons
