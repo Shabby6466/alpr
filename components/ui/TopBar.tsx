@@ -40,23 +40,6 @@ export default function TopBar({ title, subtitle, connected }: Props) {
       <div className="flex-1 flex justify-center max-w-xl">
         <GlobalSearch />
       </div>
-
-      <div className="flex items-center gap-4 flex-shrink-0 min-w-[200px] justify-end">
-        {connected ? (
-          <div className="flex items-center gap-2 text-xs font-semibold px-2.5 py-1 rounded-full"
-            style={{ color: '#30D158', background: 'rgba(48,209,88,0.1)', letterSpacing: '0.02em' }}>
-            <div className="w-1.5 h-1.5 rounded-full bg-[#30D158] pulse-dot" />
-            LIVE
-          </div>
-        ) : connected === false ? (
-          <div className="flex items-center gap-2 text-xs font-semibold px-2.5 py-1 rounded-full text-slate-400 bg-slate-100">
-            <WifiOff size={12} />
-            OFFLINE
-          </div>
-        ) : null}
-        <div className="h-4 w-[1px] bg-slate-200 mx-1" />
-        <span className="text-xs font-bold tabular-nums tracking-widest text-slate-800">{time}</span>
-      </div>
     </header>
   )
 }

@@ -1,13 +1,14 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Camera, List, Users, ShieldAlert, Bell, ScanLine, BarChart3, Video } from 'lucide-react'
+import { LayoutDashboard, Camera, List, Users, ShieldAlert, Bell, ScanLine, BarChart3, Video, Route } from 'lucide-react'
 
 const nav = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/detect', icon: Camera, label: 'Detection' },
   { href: '/cameras', icon: Video, label: 'Cameras' },
   { href: '/events', icon: List, label: 'Events' },
+  { href: '/journeys', icon: Route, label: 'Journeys' },
   { href: '/persons', icon: Users, label: 'Persons' },
   { href: '/watchlist', icon: ShieldAlert, label: 'Watchlist' },
   { href: '/alerts', icon: Bell, label: 'Alerts' },

@@ -131,6 +131,9 @@ export interface Camera {
   frameStep: number
   active: boolean
   notes?: string
+  zone?: string
+  lat?: number
+  lng?: number
   roiInclude?: { x: number; y: number; width: number; height: number }[]
   roiExclude?: { x: number; y: number; width: number; height: number }[]
   createdAt: string
