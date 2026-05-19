@@ -15,9 +15,13 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 // ─── CSS injection ───────────────────────────────────────────────────────────
 
 function injectDashStyles() {
-  if (typeof document === 'undefined' || document.getElementById('ops-dash-styles')) return
-  const s = document.createElement('style')
-  s.id = 'ops-dash-styles'
+  if (typeof document === 'undefined') return
+  let s = document.getElementById('ops-dash-styles')
+  if (!s) {
+    s = document.createElement('style')
+    s.id = 'ops-dash-styles'
+    document.head.appendChild(s)
+  }
   s.textContent = `
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
@@ -151,8 +155,47 @@ function injectDashStyles() {
     }
     .ops-input:focus { border-color:#e8a000; }
     .ops-input::placeholder { color:#3d4f5e; }
+
+    /* Light Theme Overrides */
+    .ops-page.light-mode { color-scheme: light; }
+    .ops-page.light-mode ::-webkit-scrollbar-track { background:#e5e5ea; }
+    .ops-page.light-mode ::-webkit-scrollbar-thumb { background:#aeaeb2; }
+    .ops-page.light-mode .ops-panel-hdr { background:#ffffff; border-bottom-color:#e5e5ea; color:#3a3a3c; }
+    .ops-page.light-mode .ops-section-title { border-bottom-color:#e5e5ea; color:#3a3a3c; }
+    .ops-page.light-mode .ops-stat-cell { border-right-color:#e5e5ea; }
+    .ops-page.light-mode .ops-stat-label { color:#8e8e93; }
+    .ops-page.light-mode .ops-feed-row { border-bottom-color:#e5e5ea; }
+    .ops-page.light-mode .ops-feed-row:hover { background:#f2f2f7; }
+    .ops-page.light-mode .ops-feed-row.selected { background:#f2f2f7; border-left-color:#d48a00; }
+    .ops-page.light-mode .ops-feed-row.watch-row  { border-left-color:#d48a00; }
+    .ops-page.light-mode .ops-feed-row.clear-row  { border-left-color:#aeaeb2; }
+    .ops-page.light-mode .plate-watch { color:#d48a00; }
+    .ops-page.light-mode .plate-clear { color:#1d1d1f; }
+    .ops-page.light-mode .badge-watch  { color:#d48a00; border-color:rgba(212,138,0,0.3); background:rgba(212,138,0,0.08); }
+    .ops-page.light-mode .badge-clear  { color:#8e8e93; border-color:#aeaeb2; }
+    .ops-page.light-mode .badge-live   { color:#28a745; border-color:rgba(40,167,69,0.3); background:rgba(40,167,69,0.08); }
+    .ops-page.light-mode .badge-amber  { color:#d48a00; border-color:rgba(212,138,0,0.3); background:rgba(212,138,0,0.08); }
+    .ops-page.light-mode .ops-tab { color:#8e8e93; }
+    .ops-page.light-mode .ops-tab:hover { color:#1d1d1f; }
+    .ops-page.light-mode .ops-tab.active { color:#d48a00; border-bottom-color:#d48a00; }
+    .ops-page.light-mode .ops-btn { background:#ffffff; }
+    .ops-page.light-mode .ops-btn-amber { color:#d48a00; border-color:rgba(212,138,0,0.3); background:rgba(212,138,0,0.06); }
+    .ops-page.light-mode .ops-btn-amber:hover { background:rgba(212,138,0,0.14); }
+    .ops-page.light-mode .ops-btn-blue  { color:#007aff; border-color:rgba(0,122,255,0.3); background:rgba(0,122,255,0.06); }
+    .ops-page.light-mode .ops-btn-blue:hover { background:rgba(0,122,255,0.14); }
+    .ops-page.light-mode .face-tile { background:#ffffff; border-color:#e5e5ea; }
+    .ops-page.light-mode .face-tile:hover { border-color:#d48a00; }
+    .ops-page.light-mode .face-tile.matched { border-color:rgba(40,167,69,0.3); }
+    .ops-page.light-mode .conf-bar { background:#e5e5ea; }
+    .ops-page.light-mode .conf-high  { background:#28a745; }
+    .ops-page.light-mode .conf-mid   { background:#d48a00; }
+    .ops-page.light-mode .health-row { border-bottom-color:#e5e5ea; }
+    .ops-page.light-mode .health-nom  { color:#28a745; }
+    .ops-page.light-mode .health-warn { color:#d48a00; }
+    .ops-page.light-mode .ops-input { background:#ffffff; border-color:#e5e5ea; color:#1d1d1f; }
+    .ops-page.light-mode .ops-input:focus { border-color:#d48a00; }
+    .ops-page.light-mode .ops-input::placeholder { color:#8e8e93; }
   `
-  document.head.appendChild(s)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1004,7 +1047,7 @@ function CameraOverviewPanel({ cameras, recentEvents, allAlerts, watchlistData, 
       </div>
 
       <div className="ops-section-title" style={{ flexShrink: 0 }}>
-        {led(C.green, 'led-slow')} CAMERA STATUS
+        CAMERA STATUS
         <span style={{ marginLeft: 'auto', fontSize: 9, color: C.txt3 }}>CLICK TO EXPAND</span>
       </div>
 
@@ -1027,13 +1070,6 @@ function CameraOverviewPanel({ cameras, recentEvents, allAlerts, watchlistData, 
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer' }}
                 onClick={() => onExpand(isExpanded ? null : cam.id)}
               >
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                  background: isOnline ? C.green : C.red,
-                  boxShadow: `0 0 6px ${isOnline ? C.green : C.red}`,
-                  display: 'inline-block',
-                  animation: isOnline ? 'led-slow 2s ease-in-out infinite' : 'none',
-                }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cam.name}</div>
                   <div style={{ fontSize: 8, color: C.txt3, marginTop: 1, letterSpacing: '0.06em' }}>{cam.id.slice(-8).toUpperCase()}</div>
@@ -1372,6 +1408,12 @@ export default function OpsDashboard() {
   useEffect(() => { injectDashStyles() }, [])
 
   // ── State
+  const [isLightMode, setIsLightMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('ops-light-mode') === 'true'
+  })
+  useEffect(() => { localStorage.setItem('ops-light-mode', String(isLightMode)) }, [isLightMode])
+
   const [feedFilter, setFeedFilter]     = useState<'ALL' | 'ALERT' | 'WATCH' | 'CLEAR'>('ALL')
   const [selectedEvent, setSelectedEvent] = useState<DetectionEvent | null>(null)
   const [centerView, setCenterView]     = useState<'MAP' | 'CAMERAS' | 'WATCHLIST'>('MAP')
@@ -1483,11 +1525,13 @@ export default function OpsDashboard() {
     `CAMERAS: ${streamingCount} LIVE · ${offlineCount} OFFLINE  |  `,
   ]
 
-  const C = { bg0: '#0a0c0e', bg1: '#0e1114', bg2: '#12161a', bg3: '#181d22', amber: '#e8a000', green: '#2db55d', red: '#d93a3a', blue: '#2f7fc1', txt: '#c8d0d8', txt2: '#78899a', txt3: '#3d4f5e', border: '#222831' }
+  const darkC = { bg0: '#0a0c0e', bg1: '#0e1114', bg2: '#12161a', bg3: '#181d22', amber: '#e8a000', green: '#2db55d', red: '#d93a3a', blue: '#2f7fc1', txt: '#c8d0d8', txt2: '#78899a', txt3: '#3d4f5e', border: '#222831' }
+  const lightC = { bg0: '#f2f2f7', bg1: '#ffffff', bg2: '#f9f9f9', bg3: '#f2f2f7', amber: '#d48a00', green: '#28a745', red: '#d93a3a', blue: '#007aff', txt: '#1d1d1f', txt2: '#3a3a3c', txt3: '#8e8e93', border: '#e5e5ea' }
+  const C = isLightMode ? lightC : darkC
 
   return (
     <div
-      className="ops-page"
+      className={`ops-page ${isLightMode ? 'light-mode' : ''}`}
       style={{
         height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
         background: C.bg0, color: C.txt,
@@ -1498,9 +1542,9 @@ export default function OpsDashboard() {
 
         {/* Left: brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 14, paddingRight: 18, borderRight: `1px solid ${C.border}`, flexShrink: 0 }}>
-          <img src="/Logo.png" alt="MITS" style={{ height: 32, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+          <img src="/Logo.png" alt="MITS" style={{ height: 32, width: 'auto', objectFit: 'contain', flexShrink: 0, filter: isLightMode ? 'invert(1)' : 'none' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <img src="/M.I.T.S.png" alt="M.I.T.S." style={{ height: 14, width: 'auto', objectFit: 'contain' }} />
+            <img src="/M.I.T.S.png" alt="M.I.T.S." style={{ height: 14, width: 'auto', objectFit: 'contain', filter: isLightMode ? 'invert(1)' : 'none' }} />
             <div style={{ fontSize: 8, color: C.txt3, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Multiple Identity Tracking System</div>
           </div>
         </div>
@@ -1510,6 +1554,12 @@ export default function OpsDashboard() {
 
         {/* Right: cameras status + clock + admin */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingRight: 16, paddingLeft: 16, borderLeft: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <button 
+            onClick={() => setIsLightMode(!isLightMode)}
+            className="ops-btn" style={{ borderColor: C.border, color: C.txt }}
+          >
+            {isLightMode ? 'DARK MODE' : 'LIGHT MODE'}
+          </button>
           <Link href="/admin/cameras" style={{ textDecoration: 'none' }}>
             <button className="ops-btn ops-btn-amber">→ ADMIN PANEL</button>
           </Link>
@@ -1526,7 +1576,6 @@ export default function OpsDashboard() {
           {/* Panel header — title changes based on context */}
           <div className="ops-panel-hdr" style={{ justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {led(C.amber, 'led-slow')}
               <span>
                 {selectedPlate
                   ? `JOURNEY · ${selectedPlate}`
@@ -1705,15 +1754,9 @@ export default function OpsDashboard() {
           <div style={{ display: 'flex', alignItems: 'stretch', background: C.bg1, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             {(['MAP', 'CAMERAS', 'WATCHLIST'] as const).map(v => (
               <button key={v} className={`ops-tab${centerView === v ? ' active' : ''}`} onClick={() => setCenterView(v)}>
-                {v === 'MAP' ? '⊞ MAP' : v === 'CAMERAS' ? '▣ CAMERAS' : '◉ WATCHLIST'}
+                {v === 'MAP' ? 'MAP' : v === 'CAMERAS' ? 'CAMERAS' : 'WATCHLIST'}
               </button>
             ))}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 10 }}>
-              {led(C.green, 'led-slow')}
-              <span style={{ fontSize: 8, color: C.green, letterSpacing: '0.08em', fontWeight: 700 }}>
-                {centerView === 'CAMERAS' ? `${streamingCount}/${cameras.length} LIVE` : 'MAP LIVE'}
-              </span>
-            </div>
           </div>
 
           {/* Content area — switches per tab */}
@@ -1721,7 +1764,7 @@ export default function OpsDashboard() {
 
             {/* MAP VIEW */}
             {centerView === 'MAP' && (
-              <OpsMap cameras={cameras} journeys={journeys} plateTrail={plateTrail} />
+              <OpsMap cameras={cameras} journeys={journeys} plateTrail={plateTrail} isLightMode={isLightMode} />
             )}
 
             {/* CAMERAS VIEW */}
@@ -1772,7 +1815,7 @@ export default function OpsDashboard() {
 
           {/* Panel header */}
           <div className="ops-panel-hdr">
-            {led(C.green, 'led-slow')}FACIAL RECOGNITION
+            FACIAL RECOGNITION
           </div>
 
           {/* Stats row */}
@@ -1791,7 +1834,6 @@ export default function OpsDashboard() {
 
           {/* Live face detections */}
           <div className="ops-section-title" style={{ flexShrink: 0 }}>
-            {led(C.green, 'led-pulse')}
             LIVE DETECTIONS
           </div>
 

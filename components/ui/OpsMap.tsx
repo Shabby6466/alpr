@@ -15,9 +15,13 @@ export interface PlateTrailPoint {
 const TRAIL_COLORS = ['#e8a000', '#d93a3a', '#2f7fc1', '#2db55d', '#9b59b6', '#e67e22']
 
 function injectStyles() {
-  if (typeof document === 'undefined' || document.getElementById('opsmap-styles')) return
-  const s = document.createElement('style')
-  s.id = 'opsmap-styles'
+  if (typeof document === 'undefined') return
+  let s = document.getElementById('opsmap-styles')
+  if (!s) {
+    s = document.createElement('style')
+    s.id = 'opsmap-styles'
+    document.head.appendChild(s)
+  }
   s.textContent = `
     @keyframes opsmap-pulse {
       0% { transform: scale(1); opacity: 0.7; }
@@ -27,7 +31,10 @@ function injectStyles() {
       to { stroke-dashoffset: -120; }
     }
     .opsmap-trail-anim { animation: opsmap-move 2s linear infinite; }
+    
     .leaflet-container { background: #0a0c0e !important; }
+    .ops-page.light-mode .leaflet-container { background: #f2f2f7 !important; }
+    
     .leaflet-popup-content-wrapper {
       background: #12161a !important;
       border: 1px solid #e8a000 !important;
@@ -35,17 +42,34 @@ function injectStyles() {
       box-shadow: 0 4px 20px rgba(0,0,0,0.8) !important;
       color: #c8d0d8 !important;
     }
+    .ops-page.light-mode .leaflet-popup-content-wrapper {
+      background: #ffffff !important;
+      border: 1px solid #d48a00 !important;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
+      color: #1d1d1f !important;
+    }
+    
     .leaflet-popup-tip { background: #12161a !important; }
+    .ops-page.light-mode .leaflet-popup-tip { background: #ffffff !important; }
+    
     .leaflet-zoom-box { border-color: #e8a000 !important; }
+    .ops-page.light-mode .leaflet-zoom-box { border-color: #d48a00 !important; }
+    
     .leaflet-control-zoom a {
       background: #12161a !important;
       color: #e8a000 !important;
       border-color: #222831 !important;
       border-radius: 0 !important;
     }
+    .ops-page.light-mode .leaflet-control-zoom a {
+      background: #ffffff !important;
+      color: #d48a00 !important;
+      border-color: #e5e5ea !important;
+    }
+    
     .leaflet-control-zoom a:hover { background: #181d22 !important; }
+    .ops-page.light-mode .leaflet-control-zoom a:hover { background: #f2f2f7 !important; }
   `
-  document.head.appendChild(s)
 }
 
 function makeCameraIcon(streaming: boolean, hasAlert: boolean) {
@@ -145,7 +169,7 @@ function PlateTrailLayer({ trail }: { trail: PlateTrailPoint[] }) {
   return null
 }
 
-export default function OpsMap({ cameras, journeys, plateTrail = [] }: { cameras: Camera[]; journeys: Journey[]; plateTrail?: PlateTrailPoint[] }) {
+export default function OpsMap({ cameras, journeys, plateTrail = [], isLightMode = false }: { cameras: Camera[]; journeys: Journey[]; plateTrail?: PlateTrailPoint[]; isLightMode?: boolean }) {
   useEffect(() => { injectStyles() }, [])
 
   const camerasWithGps = cameras.filter(c => c.lat != null && c.lng != null)
@@ -168,7 +192,9 @@ export default function OpsMap({ cameras, journeys, plateTrail = [] }: { cameras
       attributionControl={false}
     >
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url={isLightMode 
+          ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"}
         subdomains="abcd"
         maxZoom={20}
       />
