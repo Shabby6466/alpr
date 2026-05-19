@@ -102,6 +102,7 @@ export interface Person {
   name: string
   plateNumbers: string[]
   notes?: string
+  faceThumbnail?: string
   createdAt: string
   visits?: DetectionEvent[]
 }

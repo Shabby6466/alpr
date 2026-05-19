@@ -5,7 +5,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { useSSE } from '@/lib/useSSE'
 import { getVideo, CameraVideoEntry } from '@/lib/cameraVideoStore'
-import { Camera, Journey, Alert, WatchlistEntry, DetectionEvent } from '@/types'
+import { Camera, Journey, Alert, WatchlistEntry, DetectionEvent, Person } from '@/types'
 import type { PlateTrailPoint } from '@/components/ui/OpsMap'
 
 const OpsMap = dynamic(() => import('@/components/ui/OpsMap'), { ssr: false })
@@ -367,22 +367,6 @@ function CameraFeed({ cam, recentDetections, C }: {
         padding: '8px 12px', background: C.bg2, borderBottom: `1px solid #1c2330`,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-            background: accentColor, boxShadow: `0 0 8px ${accentColor}`,
-            display: 'inline-block',
-            animation: isOnline ? 'led-slow 2s ease-in-out infinite' : 'none',
-          }} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#e2e8f0', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {cam.name}
-            </div>
-            {cam.zone && (
-              <div style={{ fontSize: 9, color: C.txt3, letterSpacing: '0.06em', marginTop: 1 }}>{cam.zone}</div>
-            )}
-          </div>
-        </div>
         <span style={{
           fontSize: 8, fontWeight: 800, letterSpacing: '0.12em', padding: '2px 7px',
           flexShrink: 0,
@@ -539,6 +523,16 @@ function CameraGrid({ cameras, recentEvents, C, onSelectCamera }: {
   C: Record<string, string>
   onSelectCamera?: (cam: Camera) => void
 }) {
+  const [search, setSearch]       = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // ESC closes expanded view
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpandedId(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   if (cameras.length === 0) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
@@ -547,44 +541,366 @@ function CameraGrid({ cameras, recentEvents, C, onSelectCamera }: {
         </svg>
         <div style={{ fontSize: 9, color: C.txt3, letterSpacing: '0.1em' }}>NO CAMERAS CONFIGURED</div>
         <Link href="/admin/cameras" style={{ textDecoration: 'none' }}>
-          <button style={{
-            fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 12px',
-            border: `1px solid ${C.amber}55`, color: C.amber, background: 'rgba(232,160,0,0.06)',
-            cursor: 'pointer', fontFamily: 'inherit',
-          }}>+ ADD CAMERAS</button>
+          <button style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 12px', border: `1px solid ${C.amber}55`, color: C.amber, background: 'rgba(232,160,0,0.06)', cursor: 'pointer', fontFamily: 'inherit' }}>+ ADD CAMERAS</button>
         </Link>
       </div>
     )
   }
 
-  const cols = cameras.length <= 2 ? 1 : cameras.length <= 4 ? 2 : cameras.length <= 9 ? 3 : 4
+  // ── Expanded single-camera view ──────────────────────────────────────────────
+  const expandedCam = expandedId ? cameras.find(c => c.id === expandedId) ?? null : null
+  if (expandedCam) {
+    const camEvents = recentEvents.filter(e => e.cameraId === expandedCam.id || e.cameraName === expandedCam.name)
+    const liveCount = cameras.filter(c => c.streaming).length
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg0 }}>
+        {/* Expanded header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: C.bg2, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <button
+            onClick={() => setExpandedId(null)}
+            style={{ background: 'none', border: 'none', color: C.amber, cursor: 'pointer', fontSize: 9, fontWeight: 800, fontFamily: 'inherit', letterSpacing: '0.1em', padding: 0 }}
+          >← ALL CAMERAS</button>
+          <div style={{ width: 1, height: 14, background: C.border }} />
+           <span style={{ fontSize: 12, fontWeight: 800, color: C.txt, letterSpacing: '0.08em', flex: 1 }}>{expandedCam.name.toUpperCase()}</span>
+              <button                                                                                                                                             
+                onClick={() => onSelectCamera?.(expandedCam)}                                                                                                     
+                style={{ background: 'none', border: `1px solid ${C.blue}55`, color: C.blue, cursor: 'pointer', fontSize: 8, fontWeight: 700, fontFamily: 'inherit', letterSpacing: '0.08em', padding: '3px 10px' }}                                                                                                            
+             >TRACK →</button>                                                                                                                                   
+              <span style={{ fontSize: 7, color: C.txt3, letterSpacing: '0.06em' }}>ESC to close</span>
+          {/* <span style={{ fontSize: 12, fontWeight: 800, color: C.txt, letterSpacing: '0.08em' }}>{expandedCam.name.toUpperCase()}</span> */}
+        </div>
+
+        {/* Prev / next camera navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', background: C.bg1, borderBottom: `1px solid ${C.border}`, flexShrink: 0, overflowX: 'auto' }}>
+          {cameras.map((cam, idx) => (
+            <button
+              key={cam.id}
+              onClick={() => setExpandedId(cam.id)}
+              style={{
+                background: cam.id === expandedId ? C.amber : 'none',
+                border: `1px solid ${cam.id === expandedId ? C.amber : cam.streaming ? C.green + '55' : C.border}`,
+                color: cam.id === expandedId ? C.bg0 : cam.streaming ? C.green : C.txt3,
+                cursor: 'pointer', fontSize: 7, fontWeight: 700, fontFamily: 'inherit',
+                letterSpacing: '0.06em', padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {String(idx + 1).padStart(2, '0')} · {cam.name.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* Full-panel feed */}
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <CameraFeed cam={expandedCam} recentDetections={camEvents} C={C} />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Grid view ────────────────────────────────────────────────────────────────
+  const q = search.toLowerCase()
+  const filtered = q
+    ? cameras.filter(c => c.name.toLowerCase().includes(q) || (c.zone ?? '').toLowerCase().includes(q))
+    : cameras
+
+  const liveCount    = cameras.filter(c => c.streaming).length
+  const offlineCount = cameras.filter(c => !c.streaming).length
+  const cols = filtered.length <= 2 ? 2 : filtered.length <= 6 ? 3 : filtered.length <= 12 ? 4 : 5
 
   return (
-    <div style={{ width: '100%', height: '100%', overflowY: 'auto', padding: 6 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 5 }}>
-        {cameras.map(cam => {
-          const camEvents = recentEvents
-            .filter(e => e.cameraId === cam.id || e.cameraName === cam.name)
-            .slice(0, 5)
-          return (
-            <div
-              key={cam.id}
-              onClick={() => onSelectCamera?.(cam)}
-              style={{ cursor: onSelectCamera ? 'pointer' : undefined, position: 'relative' }}
-            >
-              <CameraFeed cam={cam} recentDetections={camEvents} C={C} />
-              {onSelectCamera && (
-                <div style={{
-                  position: 'absolute', top: 8, right: 8,
-                  fontSize: 7, fontWeight: 800, letterSpacing: '0.1em',
-                  color: C.amber, background: 'rgba(232,160,0,0.15)',
-                  border: `1px solid ${C.amber}44`, padding: '2px 6px',
-                  pointerEvents: 'none',
-                }}>TRACK →</div>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: C.bg2, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        {/* Search */}
+        <div style={{ position: 'relative', flex: 1, maxWidth: 280 }}>
+          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: C.txt3, pointerEvents: 'none' }}>⊞</span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="SEARCH CAMERAS…"
+            style={{
+              width: '100%', paddingLeft: 22, paddingRight: search ? 22 : 8, paddingTop: 4, paddingBottom: 4,
+              background: C.bg3, border: `1px solid ${C.border}`, color: C.txt,
+              fontSize: 9, fontFamily: 'inherit', letterSpacing: '0.08em', outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: C.txt3, cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0 }}
+            >✕</button>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 'auto', flexShrink: 0 }}>
+          <span style={{ fontSize: 8, color: C.txt3, letterSpacing: '0.08em' }}>
+            {filtered.length === cameras.length ? cameras.length : `${filtered.length}/${cameras.length}`} CAMERAS
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {led(C.green, 'led-slow')}
+            <span style={{ fontSize: 8, color: C.green, fontWeight: 700 }}>{liveCount} LIVE</span>
+          </div>
+          {offlineCount > 0 && (
+            <span style={{ fontSize: 8, color: C.red, fontWeight: 700 }}>{offlineCount} OFFLINE</span>
+          )}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: C.txt3, fontSize: 9, letterSpacing: '0.1em' }}>
+            NO CAMERAS MATCH "{search.toUpperCase()}"
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }}>
+            {filtered.map(cam => {
+              const camEvents = recentEvents.filter(e => e.cameraId === cam.id || e.cameraName === cam.name)
+              const lastPlate = camEvents[0]
+              return (
+                <div
+                  key={cam.id}
+                  onClick={() => setExpandedId(cam.id)}
+                  style={{
+                    cursor: 'pointer',
+                    border: `1px solid ${cam.streaming ? C.green + '33' : C.border}`,
+                    background: C.bg1,
+                    display: 'flex', flexDirection: 'column',
+                    transition: 'border-color 0.15s',
+                    position: 'relative',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = cam.streaming ? C.green + '88' : C.amber + '66')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = cam.streaming ? C.green + '33' : C.border)}
+                >
+                  {/* Feed */}
+                  <div style={{ flex: 1 }}>
+                    <CameraFeed cam={cam} recentDetections={camEvents} C={C} />
+                  </div>
+
+                  {/* Info bar */}
+                  <div style={{ padding: '4px 8px', background: C.bg2, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: cam.streaming ? C.green : C.red, flexShrink: 0 }} />
+                      <span style={{ fontSize: 8, fontWeight: 700, color: C.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>
+                        {cam.name.toUpperCase()}
+                      </span>
+                    </div>
+                    {lastPlate && (
+                      <span style={{ fontSize: 7, color: C.amber, fontWeight: 700, letterSpacing: '0.06em', flexShrink: 0 }}>
+                        {lastPlate.plateText}
+                      </span>
+                    )}
+                    {camEvents.length > 0 && (
+                      <span style={{ fontSize: 7, color: C.txt3, flexShrink: 0 }}>{camEvents.length}</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Watchlist View ───────────────────────────────────────────────────────────
+
+function WatchlistView({ watchlist, persons, alerts, C, onOpenJourney }: {
+  watchlist: WatchlistEntry[]
+  persons: Person[]
+  alerts: Alert[]
+  C: Record<string, string>
+  onOpenJourney: (plate: string) => void
+}) {
+  const [tab, setTab] = useState<'PLATES' | 'PERSONS' | 'ALERTS'>('PLATES')
+  const unacked = alerts.filter(a => !a.acknowledged)
+
+  // Persons that have associated plates on the watchlist OR have notes/plates enrolled
+  const watchlistPlates = new Set(watchlist.map(w => w.plateText))
+  const personsOnWatchlist = persons.filter(p =>
+    p.plateNumbers?.some(pl => watchlistPlates.has(pl))
+  )
+  const otherPersons = persons.filter(p =>
+    !p.plateNumbers?.some(pl => watchlistPlates.has(pl))
+  )
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', background: C.bg1, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        {([
+          { key: 'PLATES',  label: `⬡ PLATES`,  count: watchlist.length },
+          { key: 'PERSONS', label: `◎ PERSONS`, count: persons.length },
+          { key: 'ALERTS',  label: `⚠ ALERTS`,  count: unacked.length },
+        ] as const).map(({ key, label, count }) => (
+          <button
+            key={key}
+            className={`ops-tab${tab === key ? ' active' : ''}`}
+            style={{ flex: 1, padding: '7px 0', position: 'relative' }}
+            onClick={() => setTab(key)}
+          >
+            {label}
+            {count > 0 && (
+              <span style={{
+                marginLeft: 5, fontSize: 7, fontWeight: 800,
+                color: key === 'ALERTS' ? C.red : C.amber,
+                background: key === 'ALERTS' ? 'rgba(217,58,58,0.15)' : 'rgba(232,160,0,0.12)',
+                border: `1px solid ${key === 'ALERTS' ? C.red + '44' : C.amber + '44'}`,
+                padding: '0 5px',
+              }}>{count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* PLATES tab */}
+      {tab === 'PLATES' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {watchlist.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: C.txt3, fontSize: 9, letterSpacing: '0.1em' }}>NO ACTIVE PLATE ENTRIES</div>
+          ) : watchlist.map(w => {
+            const hasAlert = unacked.some(a => a.plateText === w.plateText)
+            return (
+              <div key={w.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 16px', borderBottom: `1px solid ${C.border}`,
+                borderLeft: `3px solid ${hasAlert ? C.red : C.amber}`,
+                background: hasAlert ? 'rgba(217,58,58,0.04)' : 'transparent',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: hasAlert ? C.red : C.amber, letterSpacing: '0.12em' }}>{w.plateText}</span>
+                    {hasAlert && <span className="ops-badge badge-alert">ALERT</span>}
+                    <span className="ops-badge" style={{ color: C.green, borderColor: C.green + '44', background: 'rgba(45,181,93,0.08)', fontSize: 7 }}>ACTIVE</span>
+                  </div>
+                  {w.reason && (
+                    <span style={{ fontSize: 9, color: C.txt3, letterSpacing: '0.04em' }}>{w.reason}</span>
+                  )}
+                </div>
+                <button
+                  style={{ background: 'none', border: `1px solid ${C.blue}44`, color: C.blue, cursor: 'pointer', fontSize: 7, fontFamily: 'inherit', fontWeight: 700, padding: '3px 8px', letterSpacing: '0.08em' }}
+                  onClick={() => onOpenJourney(w.plateText)}
+                >JOURNEY →</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* PERSONS tab */}
+      {tab === 'PERSONS' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {persons.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: C.txt3, fontSize: 9, letterSpacing: '0.1em' }}>NO PERSONS ENROLLED</div>
+          ) : (
+            <>
+              {personsOnWatchlist.length > 0 && (
+                <>
+                  <div style={{ fontSize: 8, color: C.red, letterSpacing: '0.14em', fontWeight: 700, padding: '6px 14px', background: 'rgba(217,58,58,0.06)', borderBottom: `1px solid ${C.border}` }}>
+                    ⚠ WATCHLISTED PERSONS
+                  </div>
+                  {personsOnWatchlist.map(p => <PersonRow key={p.id} p={p} watchlistPlates={watchlistPlates} hasAlert={p.plateNumbers?.some(pl => unacked.some(a => a.plateText === pl)) ?? false} C={C} onOpenJourney={onOpenJourney} />)}
+                </>
               )}
+              {otherPersons.length > 0 && (
+                <>
+                  <div style={{ fontSize: 8, color: C.txt3, letterSpacing: '0.14em', fontWeight: 700, padding: '6px 14px', background: C.bg2, borderBottom: `1px solid ${C.border}` }}>
+                    ENROLLED PERSONS
+                  </div>
+                  {otherPersons.map(p => <PersonRow key={p.id} p={p} watchlistPlates={watchlistPlates} hasAlert={false} C={C} onOpenJourney={onOpenJourney} />)}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ALERTS tab */}
+      {tab === 'ALERTS' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {unacked.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: C.txt3, fontSize: 9, letterSpacing: '0.1em' }}>NO UNACKNOWLEDGED ALERTS</div>
+          ) : unacked.map(a => (
+            <div key={a.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 16px', borderBottom: `1px solid ${C.border}`,
+              borderLeft: `3px solid ${C.red}`,
+            }}>
+              {a.thumbnailBase64 && (
+                <img src={`data:image/jpeg;base64,${a.thumbnailBase64}`} alt="" style={{ width: 52, height: 36, objectFit: 'cover', flexShrink: 0, border: `1px solid ${C.red}44` }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.red, letterSpacing: '0.12em' }}>{a.plateText}</span>
+                  <span className="ops-badge badge-alert">UNACKED</span>
+                </div>
+                <span style={{ fontSize: 9, color: C.txt3 }}>{a.reason ?? '—'} · {new Date(a.timestamp).toLocaleTimeString('en-PK', { hour12: false })}</span>
+              </div>
+              <button
+                style={{ background: 'none', border: `1px solid ${C.blue}44`, color: C.blue, cursor: 'pointer', fontSize: 7, fontFamily: 'inherit', fontWeight: 700, padding: '3px 8px', letterSpacing: '0.08em' }}
+                onClick={() => onOpenJourney(a.plateText)}
+              >JOURNEY →</button>
             </div>
-          )
-        })}
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PersonRow({ p, watchlistPlates, hasAlert, C, onOpenJourney }: {
+  p: Person
+  watchlistPlates: Set<string>
+  hasAlert: boolean
+  C: Record<string, string>
+  onOpenJourney: (plate: string) => void
+}) {
+  const flaggedPlates = (p.plateNumbers ?? []).filter(pl => watchlistPlates.has(pl))
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 16px', borderBottom: `1px solid ${C.border}`,
+      borderLeft: `3px solid ${hasAlert ? C.red : flaggedPlates.length > 0 ? C.amber : C.blue}`,
+      background: hasAlert ? 'rgba(217,58,58,0.04)' : 'transparent',
+    }}>
+      {/* Face thumbnail or initial */}
+      <div style={{ width: 44, height: 44, flexShrink: 0, border: `1px solid ${hasAlert ? C.red : C.blue}55`, overflow: 'hidden', position: 'relative' }}>
+        {p.faceThumbnail ? (
+          <img
+            src={`data:image/jpeg;base64,${p.faceThumbnail}`}
+            alt={p.name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div style={{ width: '100%', height: '100%', background: C.bg3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 14, color: hasAlert ? C.red : C.blue, fontWeight: 700 }}>{p.name.charAt(0).toUpperCase()}</span>
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: hasAlert ? C.red : C.txt, letterSpacing: '0.06em' }}>{p.name.toUpperCase()}</span>
+          {hasAlert && <span className="ops-badge badge-alert">ALERT</span>}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {(p.plateNumbers ?? []).map(pl => (
+            <span key={pl} style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '0.08em',
+              color: watchlistPlates.has(pl) ? C.red : C.txt3,
+              background: watchlistPlates.has(pl) ? 'rgba(217,58,58,0.1)' : C.bg3,
+              border: `1px solid ${watchlistPlates.has(pl) ? C.red + '44' : C.border}`,
+              padding: '1px 5px',
+              cursor: 'pointer',
+            }}
+            onClick={() => onOpenJourney(pl)}
+            >{pl}</span>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -991,6 +1307,65 @@ function PlateJourneyView({ plateText, cameras, C, onBack }: {
   )
 }
 
+// ─── Resize handle ───────────────────────────────────────────────────────────
+
+const PANEL_MIN = 200
+const PANEL_MAX = 640
+const PANEL_DEFAULT = 380
+
+function ResizeHandle({ onDrag }: { onDrag: (delta: number) => void }) {
+  const dragging = useRef(false)
+  const [active, setActive] = useState(false)
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    dragging.current = true
+    setActive(true)
+    let lastX = e.clientX
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return
+      onDrag(ev.clientX - lastX)
+      lastX = ev.clientX
+    }
+    const onUp = () => {
+      dragging.current = false
+      setActive(false)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      style={{
+        width: 5, flexShrink: 0, cursor: 'col-resize', zIndex: 20, position: 'relative',
+        background: active ? 'rgba(232,160,0,0.5)' : 'transparent',
+        borderLeft: `1px solid #222831`,
+        transition: 'background 0.1s',
+        userSelect: 'none',
+      }}
+      onMouseEnter={e => { if (!dragging.current) e.currentTarget.style.background = 'rgba(232,160,0,0.2)' }}
+      onMouseLeave={e => { if (!dragging.current) e.currentTarget.style.background = 'transparent' }}
+    >
+      {/* Grip dots */}
+      <div style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        display: 'flex', flexDirection: 'column', gap: 3,
+        pointerEvents: 'none',
+      }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width: 2, height: 2, borderRadius: '50%', background: active ? '#e8a000' : '#3d4f5e' }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function OpsDashboard() {
@@ -999,12 +1374,24 @@ export default function OpsDashboard() {
   // ── State
   const [feedFilter, setFeedFilter]     = useState<'ALL' | 'ALERT' | 'WATCH' | 'CLEAR'>('ALL')
   const [selectedEvent, setSelectedEvent] = useState<DetectionEvent | null>(null)
-  const [centerView, setCenterView]     = useState<'MAP' | 'CAMERAS' | 'INCIDENTS'>('MAP')
+  const [centerView, setCenterView]     = useState<'MAP' | 'CAMERAS' | 'WATCHLIST'>('MAP')
   const [liveEvents, setLiveEvents]     = useState<DetectionEvent[]>([])
   const [liveAlerts, setLiveAlerts]     = useState<Alert[]>([])
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null)
   const [selectedPlate, setSelectedPlate]   = useState<string | null>(null)
   const [expandedCameraId, setExpandedCameraId] = useState<string | null>(null)
+
+  // ── Resizable panels — persist to localStorage
+  const [leftWidth, setLeftWidth]   = useState<number>(() => {
+    if (typeof window === 'undefined') return PANEL_DEFAULT
+    return Math.min(PANEL_MAX, Math.max(PANEL_MIN, Number(localStorage.getItem('ops-left-w')) || PANEL_DEFAULT))
+  })
+  const [rightWidth, setRightWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return PANEL_DEFAULT
+    return Math.min(PANEL_MAX, Math.max(PANEL_MIN, Number(localStorage.getItem('ops-right-w')) || PANEL_DEFAULT))
+  })
+  useEffect(() => { localStorage.setItem('ops-left-w',  String(leftWidth))  }, [leftWidth])
+  useEffect(() => { localStorage.setItem('ops-right-w', String(rightWidth)) }, [rightWidth])
 
   const openJourney = (plate: string) => { setSelectedPlate(plate); setCenterView('MAP') }
 
@@ -1015,6 +1402,7 @@ export default function OpsDashboard() {
   const { data: journeysData }        = useSWR<any>('/api/journeys?status=active&limit=20', fetcher, { refreshInterval: 15000 })
   const { data: eventsData }          = useSWR<any>('/api/events?limit=80', fetcher, { refreshInterval: 30000 })
   const { data: faceData }            = useSWR<any>('/api/face-events?limit=18', fetcher, { refreshInterval: 10000 })
+  const { data: personsData = [] }   = useSWR<Person[]>('/api/persons', fetcher, { refreshInterval: 30000 })
   const { data: plateEventsData }    = useSWR<any>(
     selectedPlate ? `/api/events?plateText=${encodeURIComponent(selectedPlate)}&limit=50` : null,
     fetcher,
@@ -1122,10 +1510,6 @@ export default function OpsDashboard() {
 
         {/* Right: cameras status + clock + admin */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingRight: 16, paddingLeft: 16, borderLeft: `1px solid ${C.border}`, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {led(cameras.length > 0 ? C.green : C.txt3, 'led-slow')}
-            <span style={{ fontSize: 10, color: C.txt2, letterSpacing: '0.08em' }}>{streamingCount}/{cameras.length} CAM</span>
-          </div>
           <Link href="/admin/cameras" style={{ textDecoration: 'none' }}>
             <button className="ops-btn ops-btn-amber">→ ADMIN PANEL</button>
           </Link>
@@ -1133,11 +1517,11 @@ export default function OpsDashboard() {
         </div>
       </div>
 
-      {/* ─── MAIN 3-COLUMN GRID ─────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '380px 1fr 380px', overflow: 'hidden', minHeight: 0 }}>
+      {/* ─── MAIN 3-COLUMN FLEX ─────────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ══════════ LEFT PANEL — ALPR (dynamic) ══════════ */}
-        <div style={{ background: C.bg1, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ width: leftWidth, minWidth: PANEL_MIN, flexShrink: 0, background: C.bg1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Panel header — title changes based on context */}
           <div className="ops-panel-hdr" style={{ justifyContent: 'space-between' }}>
@@ -1150,12 +1534,12 @@ export default function OpsDashboard() {
                     ? `TRACKING · ${selectedCamera.name.toUpperCase()}`
                     : centerView === 'MAP'
                       ? 'CAMERA OVERVIEW'
-                      : 'ALPR SYSTEM'}
+                      : 'ALPR'}
               </span>
             </div>
             {/* Context indicator */}
             <span style={{ fontSize: 8, color: C.txt3, letterSpacing: '0.08em' }}>
-              {centerView === 'MAP' ? '⊞ MAP' : centerView === 'CAMERAS' ? '▣ CAM' : '⚠ INC'}
+              {centerView === 'MAP' ? '⊞ MAP' : centerView === 'CAMERAS' ? '▣ CAM' : '◉ WTCH'}
             </span>
           </div>
 
@@ -1205,13 +1589,8 @@ export default function OpsDashboard() {
               onExpand={setExpandedCameraId}
             />
           ) : (
-            /* ── Default: live plate reads feed (CAMERAS with no selection, INCIDENTS) ── */
+            /* ── Default: live plate reads feed ── */
             <>
-              <div className="ops-section-title" style={{ flexShrink: 0 }}>
-                {led(C.green, 'led-pulse')}
-                LIVE PLATE READS
-                <span style={{ marginLeft: 'auto', fontSize: 9, color: C.txt3 }}>{recentEvents.length} RECORDS</span>
-              </div>
 
               <div style={{ display: 'flex', background: C.bg2, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
                 {(['ALL', 'ALERT', 'WATCH', 'CLEAR'] as const).map(f => (
@@ -1316,14 +1695,17 @@ export default function OpsDashboard() {
           )}
         </div>
 
+        {/* Left resize handle */}
+        <ResizeHandle onDrag={d => setLeftWidth(w => Math.min(PANEL_MAX, Math.max(PANEL_MIN, w + d)))} />
+
         {/* ══════════ CENTER ══════════ */}
-        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg0 }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg0 }}>
 
           {/* Toolbar — 3 view tabs */}
           <div style={{ display: 'flex', alignItems: 'stretch', background: C.bg1, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-            {(['MAP', 'CAMERAS', 'INCIDENTS'] as const).map(v => (
+            {(['MAP', 'CAMERAS', 'WATCHLIST'] as const).map(v => (
               <button key={v} className={`ops-tab${centerView === v ? ' active' : ''}`} onClick={() => setCenterView(v)}>
-                {v === 'MAP' ? '⊞ MAP' : v === 'CAMERAS' ? '▣ CAMERAS' : '⚠ INCIDENTS'}
+                {v === 'MAP' ? '⊞ MAP' : v === 'CAMERAS' ? '▣ CAMERAS' : '◉ WATCHLIST'}
               </button>
             ))}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 10 }}>
@@ -1352,27 +1734,13 @@ export default function OpsDashboard() {
               />
             )}
 
-            {/* INCIDENTS VIEW */}
-            {centerView === 'INCIDENTS' && (
-              <IncidentsView alerts={allAlerts} events={recentEvents} C={C} />
+            {/* WATCHLIST VIEW */}
+            {centerView === 'WATCHLIST' && (
+              <WatchlistView watchlist={watchlistData} persons={personsData} alerts={allAlerts} C={C} onOpenJourney={openJourney} />
             )}
+
           </div>
 
-          {/* Ticker */}
-          <div style={{ height: 30, background: C.bg1, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 10, paddingRight: 10,
-              flexShrink: 0, borderRight: `1px solid ${C.border}`, height: '100%',
-            }}>
-              {led(C.red, 'led-amber')}
-              <span style={{ fontSize: 10, color: C.red, fontWeight: 700, letterSpacing: '0.1em' }}>LIVE</span>
-            </div>
-            <div style={{ overflow: 'hidden', flex: 1 }}>
-              <span className="ticker-text" style={{ display: 'inline-block', fontSize: 10, color: C.txt2, letterSpacing: '0.06em' }}>
-                {tickerItems.join('')}
-              </span>
-            </div>
-          </div>
 
           {/* Status bar */}
           <div style={{
@@ -1396,12 +1764,15 @@ export default function OpsDashboard() {
           </div>
         </div>
 
+        {/* Right resize handle */}
+        <ResizeHandle onDrag={d => setRightWidth(w => Math.min(PANEL_MAX, Math.max(PANEL_MIN, w - d)))} />
+
         {/* ══════════ RIGHT PANEL — FACE ID ══════════ */}
-        <div style={{ background: C.bg1, borderLeft: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ width: rightWidth, minWidth: PANEL_MIN, flexShrink: 0, background: C.bg1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Panel header */}
           <div className="ops-panel-hdr">
-            {led(C.green, 'led-slow')} FACE ID SYSTEM
+            {led(C.green, 'led-slow')}FACIAL RECOGNITION
           </div>
 
           {/* Stats row */}
@@ -1462,42 +1833,6 @@ export default function OpsDashboard() {
             )}
           </div>
 
-          {/* Watchlist */}
-          <div className="ops-section-title" style={{ flexShrink: 0 }}>
-            {led(C.red, 'led-slow')}
-            WATCHLIST
-            <span className="ops-badge badge-alert" style={{ marginLeft: 6 }}>{watchlistData.length} ENTRIES</span>
-          </div>
-
-          <div style={{ maxHeight: 140, overflowY: 'auto', flexShrink: 0 }}>
-            {watchlistData.length === 0 ? (
-              <div style={{ padding: '10px', textAlign: 'center', color: C.txt3, fontSize: 9 }}>NO ACTIVE ENTRIES</div>
-            ) : watchlistData.slice(0, 6).map(w => (
-              <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: `1px solid ${C.border}`, borderLeft: `2px solid ${C.red}` }}>
-                <span style={{ color: C.red, fontSize: 12, fontWeight: 700, flex: 1 }}>{w.plateText}</span>
-                {w.reason && <span style={{ fontSize: 9, color: C.txt3, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.reason}</span>}
-              </div>
-            ))}
-          </div>
-
-          {/* Unacknowledged alerts */}
-          {alertCount > 0 && (
-            <>
-              <div className="ops-section-title" style={{ flexShrink: 0 }}>
-                {led(C.red, 'led-amber')}
-                ACTIVE ALERTS
-                <span className="ops-badge badge-alert" style={{ marginLeft: 6 }}>{alertCount}</span>
-              </div>
-              <div style={{ maxHeight: 110, overflowY: 'auto', flexShrink: 0 }}>
-                {allAlerts.filter(a => !a.acknowledged).slice(0, 5).map(a => (
-                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: `1px solid ${C.border}`, borderLeft: `2px solid ${C.red}` }}>
-                    <span style={{ color: C.red, fontSize: 12, fontWeight: 700 }}>{a.plateText}</span>
-                    <span style={{ fontSize: 9, color: C.txt3, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.reason ?? '—'}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
 
 
         </div>
