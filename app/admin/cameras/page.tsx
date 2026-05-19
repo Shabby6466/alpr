@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import useSWR, { mutate } from 'swr'
 import TopBar from '@/components/ui/TopBar'
 import Modal from '@/components/ui/Modal'
@@ -9,7 +9,7 @@ import { Camera } from '@/types'
 import { saveVideo, getVideo, removeVideo, getAllVideos } from '@/lib/cameraVideoStore'
 import {
   Video, Plus, Trash2, Power, Edit3, Wifi, WifiOff,
-  MapPin, Film, X,
+  MapPin, Film, X, Crop,
 } from 'lucide-react'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -49,6 +49,263 @@ function StatusDot({ active, streaming }: { active: boolean; streaming?: boolean
   )
 }
 
+// ── Zone Editor ─────────────────────────────────────────────────────────────
+
+type ZoneRect = { x: number; y: number; w: number; h: number }
+
+function ZoneEditorModal({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [zones, setZones] = useState<ZoneRect[]>([])
+  const [drawing, setDrawing] = useState(false)
+  const [startPt, setStartPt] = useState({ x: 0, y: 0 })
+  const [dragRect, setDragRect] = useState<ZoneRect | null>(null)
+  const [saving, setSaving] = useState(false)
+  const urlRef = useRef<string | null>(null)
+  const { toast } = useToast()
+
+  const CW = 640, CH = 360
+
+  useEffect(() => {
+    getVideo(camera.id).then(entry => {
+      if (entry) {
+        const url = URL.createObjectURL(entry.blob)
+        urlRef.current = url
+        setVideoUrl(url)
+      }
+    })
+    return () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current) }
+  }, [camera.id])
+
+  // Convert stored normalized fractions → canvas display coords
+  useEffect(() => {
+    if (camera.roiInclude?.length) {
+      setZones(camera.roiInclude.map(z => ({
+        x: z.x * CW, y: z.y * CH,
+        w: z.width * CW, h: z.height * CH,
+      })))
+    }
+  }, [])
+
+  // Redraw canvas overlay whenever zones or drag preview changes
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, CW, CH)
+
+    zones.forEach((z, i) => {
+      ctx.save()
+      ctx.strokeStyle = '#FF9500'
+      ctx.lineWidth = 2
+      ctx.setLineDash([7, 4])
+      ctx.strokeRect(z.x, z.y, z.w, z.h)
+      ctx.fillStyle = 'rgba(255,149,0,0.07)'
+      ctx.fillRect(z.x, z.y, z.w, z.h)
+      // Corner marks
+      ctx.setLineDash([])
+      ctx.strokeStyle = '#FF9500'
+      ctx.lineWidth = 2.5;
+      [[z.x, z.y, 1, 1], [z.x + z.w, z.y, -1, 1], [z.x, z.y + z.h, 1, -1], [z.x + z.w, z.y + z.h, -1, -1]].forEach(([cx, cy, dx, dy]) => {
+        ctx.beginPath(); ctx.moveTo(cx as number, cy as number); ctx.lineTo((cx as number) + (dx as number) * 10, cy as number); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(cx as number, cy as number); ctx.lineTo(cx as number, (cy as number) + (dy as number) * 10); ctx.stroke()
+      })
+      // Label pill
+      ctx.fillStyle = 'rgba(255,149,0,0.9)'
+      ctx.beginPath(); ctx.roundRect(z.x + 4, z.y + 4, 56, 18, 3); ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 10px monospace'
+      ctx.fillText(`ZONE ${i + 1}`, z.x + 8, z.y + 16)
+      ctx.restore()
+    })
+
+    if (dragRect && dragRect.w > 2 && dragRect.h > 2) {
+      ctx.strokeStyle = '#007AFF'
+      ctx.lineWidth = 2
+      ctx.setLineDash([5, 3])
+      ctx.strokeRect(dragRect.x, dragRect.y, dragRect.w, dragRect.h)
+      ctx.fillStyle = 'rgba(0,122,255,0.1)'
+      ctx.fillRect(dragRect.x, dragRect.y, dragRect.w, dragRect.h)
+      ctx.setLineDash([])
+      // Dimensions label
+      const wPct = Math.round((dragRect.w / CW) * 100)
+      const hPct = Math.round((dragRect.h / CH) * 100)
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'
+      ctx.beginPath(); ctx.roundRect(dragRect.x + dragRect.w / 2 - 28, dragRect.y + dragRect.h / 2 - 9, 56, 18, 3); ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 10px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText(`${wPct}% × ${hPct}%`, dragRect.x + dragRect.w / 2, dragRect.y + dragRect.h / 2 + 4)
+      ctx.textAlign = 'left'
+    }
+  }, [zones, dragRect])
+
+  function getPos(e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } {
+    const r = canvasRef.current!.getBoundingClientRect()
+    return {
+      x: Math.max(0, Math.min(CW, ((e.clientX - r.left) / r.width) * CW)),
+      y: Math.max(0, Math.min(CH, ((e.clientY - r.top) / r.height) * CH)),
+    }
+  }
+
+  function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    const pt = getPos(e)
+    setStartPt(pt)
+    setDrawing(true)
+    setDragRect({ x: pt.x, y: pt.y, w: 0, h: 0 })
+  }
+
+  function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!drawing) return
+    const pt = getPos(e)
+    setDragRect({
+      x: Math.min(startPt.x, pt.x),
+      y: Math.min(startPt.y, pt.y),
+      w: Math.abs(pt.x - startPt.x),
+      h: Math.abs(pt.y - startPt.y),
+    })
+  }
+
+  function onMouseUp() {
+    if (!drawing || !dragRect) return
+    setDrawing(false)
+    if (dragRect.w > 10 && dragRect.h > 10) {
+      setZones(prev => [...prev, { ...dragRect }])
+    }
+    setDragRect(null)
+  }
+
+  async function save() {
+    const roiInclude = zones.map(z => ({
+      x: +(z.x / CW).toFixed(4),
+      y: +(z.y / CH).toFixed(4),
+      width: +(z.w / CW).toFixed(4),
+      height: +(z.h / CH).toFixed(4),
+    }))
+    setSaving(true)
+    try {
+      await api.updateCamera(camera.id, { roiInclude })
+      mutate('/api/cameras')
+      toast(zones.length ? `${zones.length} detection zone(s) saved for "${camera.name}"` : `Zones cleared — full frame detection active`)
+      onClose()
+    } catch (e: any) {
+      toast(e.message ?? 'Failed to save zones', 'error')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Detection Zone — ${camera.name}`}>
+      <div style={{ userSelect: 'none' }}>
+        {/* Instruction banner */}
+        <div className="mb-3 px-3 py-2.5 rounded-xl flex items-start gap-2"
+          style={{ background: 'rgba(0,122,255,0.06)', border: '1px solid rgba(0,122,255,0.12)' }}>
+          <Crop size={14} className="text-[#007AFF] mt-0.5 flex-shrink-0" />
+          <p className="text-[11px] text-[#007AFF] font-medium leading-relaxed">
+            <strong>Click and drag</strong> on the preview below to define a detection zone.
+            Only plates entering this region will be processed — reducing false positives and focusing on high-traffic entry points.
+            Draw multiple zones if needed.
+          </p>
+        </div>
+
+        {/* Canvas / video area */}
+        <div className="relative w-full rounded-xl overflow-hidden bg-slate-900"
+          style={{ aspectRatio: '16/9' }}>
+
+          {videoUrl ? (
+            <video ref={videoRef} src={videoUrl} autoPlay loop muted playsInline
+              className="absolute inset-0 w-full h-full"
+              style={{ objectFit: 'contain' }} />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+              <Video size={36} className="text-slate-600" />
+              <p className="text-slate-500 text-xs font-medium">No preview available</p>
+              <p className="text-slate-600 text-[10px]">Assign a test video to see the camera feed here</p>
+              <p className="text-slate-600 text-[10px]">Zones will still be applied to the live stream</p>
+            </div>
+          )}
+
+          {/* Interactive canvas overlay */}
+          <canvas
+            ref={canvasRef}
+            width={CW}
+            height={CH}
+            className="absolute inset-0 w-full h-full"
+            style={{ cursor: 'crosshair' }}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+          />
+
+          {/* Zone count badge */}
+          {zones.length > 0 && (
+            <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded text-[10px] font-black text-white"
+              style={{ background: '#FF9500', letterSpacing: '0.1em', pointerEvents: 'none', zIndex: 20 }}>
+              {zones.length} ZONE{zones.length > 1 ? 'S' : ''}
+            </div>
+          )}
+
+          {/* Crosshair hint */}
+          {zones.length === 0 && !drawing && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(0,0,0,0.55)', pointerEvents: 'none', zIndex: 20 }}>
+              <p className="text-white text-[10px] font-bold tracking-wider">CLICK + DRAG TO DRAW ZONE</p>
+            </div>
+          )}
+        </div>
+
+        {/* Zone list */}
+        {zones.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Active Zones</p>
+            {zones.map((z, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl"
+                style={{ background: 'rgba(255,149,0,0.06)', border: '1px solid rgba(255,149,0,0.15)' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded border-2" style={{ borderColor: '#FF9500' }} />
+                  <span className="text-xs font-bold text-slate-700">Zone {i + 1}</span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {Math.round((z.w / CW) * 100)}% × {Math.round((z.h / CH) * 100)}%
+                    &nbsp;@ ({Math.round((z.x / CW) * 100)}%, {Math.round((z.y / CH) * 100)}%)
+                  </span>
+                </div>
+                <button onClick={() => setZones(prev => prev.filter((_, j) => j !== i))}
+                  className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-red-50 transition-all">
+                  <X size={12} className="text-slate-300 hover:text-[#FF3B30]" strokeWidth={2.5} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+          <button
+            onClick={() => setZones([])}
+            className="px-4 py-2 rounded-xl text-sm font-bold transition-all"
+            style={{ color: zones.length ? '#FF3B30' : '#8E8E93', background: zones.length ? 'rgba(255,59,48,0.06)' : 'transparent' }}
+          >
+            {zones.length ? 'Clear All' : 'No zones (full frame)'}
+          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
+              Cancel
+            </button>
+            <button onClick={save} disabled={saving}
+              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ background: '#007AFF' }}>
+              {saving ? 'Saving…' : zones.length === 0 ? 'Clear & Save' : `Save ${zones.length} Zone${zones.length > 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Camera Form ─────────────────────────────────────────────────────────────
 
 const blank = { name: '', url: '', region: 'NORTH_AMERICAN', frameStep: 5, notes: '', zone: '', lat: '', lng: '' }
@@ -57,6 +314,7 @@ export default function CamerasPage() {
   const { data: cameras = [], isLoading } = useSWR<Camera[]>('/api/cameras', fetcher, { refreshInterval: 5000 })
   const [showAdd, setShowAdd] = useState(false)
   const [editCamera, setEditCamera] = useState<Camera | null>(null)
+  const [zoneCamera, setZoneCamera] = useState<Camera | null>(null)
   const [form, setForm] = useState(blank)
   const [saving, setSaving] = useState(false)
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set())
@@ -71,6 +329,7 @@ export default function CamerasPage() {
     })
   }, [])
 
+
   async function assignVideo(camera: Camera) {
     pendingCameraRef.current = camera
     fileInputRef.current?.click()
@@ -84,6 +343,12 @@ export default function CamerasPage() {
 
     setAssigningId(camera.id)
     try {
+      // Upload to backend — worker will loop this file instead of the RTSP URL
+      const fd = new FormData()
+      fd.append('video', file)
+      await fetch(`/api/cameras/${camera.id}/assign-test-video`, { method: 'POST', body: fd })
+
+      // Also save locally for the visible video element in camera tiles
       await saveVideo({
         blob: file,
         filename: file.name,
@@ -95,6 +360,7 @@ export default function CamerasPage() {
       })
       setAssignedIds(prev => new Set([...prev, camera.id]))
       window.dispatchEvent(new Event('camera-video-updated'))
+      mutate('/api/cameras')
       toast(`Test video assigned to ${camera.name}`)
     } catch {
       toast('Failed to save video', 'error')
@@ -104,9 +370,12 @@ export default function CamerasPage() {
   }
 
   async function unassignVideo(camera: Camera) {
+    // Tell backend to remove the test video and resume RTSP
+    await fetch(`/api/cameras/${camera.id}/assign-test-video`, { method: 'DELETE' }).catch(() => {})
     await removeVideo(camera.id)
     setAssignedIds(prev => { const s = new Set(prev); s.delete(camera.id); return s })
     window.dispatchEvent(new Event('camera-video-updated'))
+    mutate('/api/cameras')
     toast(`Test video removed from ${camera.name}`)
   }
 
@@ -243,6 +512,17 @@ export default function CamerasPage() {
                           <MapPin size={8} />{camera.zone}
                         </span>
                       )}
+                      {camera.roiInclude?.length ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ color: '#FF9500', background: 'rgba(255,149,0,0.1)' }}>
+                          <Crop size={8} />{camera.roiInclude.length} zone{camera.roiInclude.length > 1 ? 's' : ''}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ color: '#8E8E93', background: 'rgba(142,142,147,0.08)' }}>
+                          <Crop size={8} />full frame
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-400 font-mono truncate">{camera.url}</p>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -291,6 +571,14 @@ export default function CamerasPage() {
                       {assigningId === camera.id ? 'Saving…' : assignedIds.has(camera.id) ? 'Replace' : 'Test Video'}
                     </button>
 
+                    {/* Configure detection zone */}
+                    <button
+                      onClick={() => setZoneCamera(camera)}
+                      title="Configure detection zone"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-orange-50">
+                      <Crop size={15} className={camera.roiInclude?.length ? 'text-[#FF9500]' : 'text-slate-400'} />
+                    </button>
+
                     <button onClick={() => openEdit(camera)}
                       className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-slate-100">
                       <Edit3 size={15} className="text-slate-400" />
@@ -310,6 +598,14 @@ export default function CamerasPage() {
           </div>
         )}
       </main>
+
+      {/* Zone editor modal */}
+      {zoneCamera && (
+        <ZoneEditorModal
+          camera={zoneCamera}
+          onClose={() => setZoneCamera(null)}
+        />
+      )}
 
       {/* Add / Edit modal */}
       <Modal open={showAdd || editCamera !== null} onClose={closeModal}

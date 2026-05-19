@@ -25,7 +25,8 @@ export default function CameraBackgroundProcessor() {
     video.muted = true
     video.loop = true
     video.playsInline = true
-    video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-9999px'
+    // Keep it in the normal flow but invisible — avoids autoplay block on off-screen elements
+    video.style.cssText = 'position:fixed;bottom:0;right:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1'
     document.body.appendChild(video)
 
     const objectUrl = URL.createObjectURL(entry.blob)
@@ -33,7 +34,13 @@ export default function CameraBackgroundProcessor() {
 
     const canvas = document.createElement('canvas')
 
-    await video.play().catch(() => {})
+    // Try immediate play; if blocked, retry on canplaythrough
+    await video.play().catch(() => {
+      return new Promise<void>(resolve => {
+        const onReady = () => { video.removeEventListener('canplaythrough', onReady); video.play().catch(() => {}).then(resolve) }
+        video.addEventListener('canplaythrough', onReady)
+      })
+    })
 
     const intervalMs = Math.max(1000, (entry.frameStep || 5) * 200)
 

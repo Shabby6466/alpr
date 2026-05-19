@@ -4,6 +4,14 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { Camera, Journey } from '@/types'
 
+export interface PlateTrailPoint {
+  lat: number
+  lng: number
+  cameraName: string
+  timestamp: string
+  count: number
+}
+
 const TRAIL_COLORS = ['#e8a000', '#d93a3a', '#2f7fc1', '#2db55d', '#9b59b6', '#e67e22']
 
 function injectStyles() {
@@ -94,7 +102,50 @@ function FitAll({ points }: { points: [number, number][] }) {
   return null
 }
 
-export default function OpsMap({ cameras, journeys }: { cameras: Camera[]; journeys: Journey[] }) {
+function PlateTrailLayer({ trail }: { trail: PlateTrailPoint[] }) {
+  const map = useMap()
+  useEffect(() => {
+    if (trail.length === 0) return
+    const layers: L.Layer[] = []
+
+    trail.forEach((pt, i) => {
+      const icon = L.divIcon({
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -18],
+        html: `<div style="width:28px;height:28px;background:#e8a000;border:2px solid #0a0c0e;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;font-weight:900;color:#0a0c0e;box-shadow:0 0 14px rgba(232,160,0,0.7);">${i + 1}</div>`,
+      })
+      const m = L.marker([pt.lat, pt.lng], { icon }).bindPopup(
+        `<div style="font-family:'IBM Plex Mono',monospace;min-width:140px">
+          <p style="color:#e8a000;font-weight:800;font-size:11px;margin:0 0 5px;text-transform:uppercase;letter-spacing:.06em">#${i + 1} · ${pt.cameraName}</p>
+          <p style="color:#c8d0d8;font-size:10px;margin:0 0 3px">${pt.count} sighting${pt.count !== 1 ? 's' : ''}</p>
+          <p style="color:#78899a;font-size:9px;margin:0">${new Date(pt.timestamp).toLocaleTimeString('en-PK', { hour12: false })} · ${new Date(pt.timestamp).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}</p>
+        </div>`
+      ).addTo(map)
+      layers.push(m)
+    })
+
+    if (trail.length >= 2) {
+      const pts = trail.map(p => [p.lat, p.lng] as [number, number])
+      const glow  = L.polyline(pts, { color: '#e8a000', weight: 10, opacity: 0.12, lineJoin: 'round' }).addTo(map)
+      const line  = L.polyline(pts, { color: '#e8a000', weight: 2.5, opacity: 0.9,  lineJoin: 'round' }).addTo(map)
+      const dash  = L.polyline(pts, { color: '#fff',    weight: 1,   opacity: 0.45, lineJoin: 'round', dashArray: '8 16' }).addTo(map)
+      const el = (dash as any)._path as SVGPathElement | undefined
+      if (el) el.classList.add('opsmap-trail-anim')
+      layers.push(glow, line, dash)
+    }
+
+    const pts = trail.map(p => [p.lat, p.lng] as [number, number])
+    if (pts.length === 1) map.setView(pts[0], 15, { animate: true })
+    else map.fitBounds(L.latLngBounds(pts), { padding: [70, 70], maxZoom: 15, animate: true })
+
+    return () => { layers.forEach(l => l.remove()) }
+  }, [map, JSON.stringify(trail)])
+  return null
+}
+
+export default function OpsMap({ cameras, journeys, plateTrail = [] }: { cameras: Camera[]; journeys: Journey[]; plateTrail?: PlateTrailPoint[] }) {
   useEffect(() => { injectStyles() }, [])
 
   const camerasWithGps = cameras.filter(c => c.lat != null && c.lng != null)
@@ -121,8 +172,9 @@ export default function OpsMap({ cameras, journeys }: { cameras: Camera[]; journ
         subdomains="abcd"
         maxZoom={20}
       />
-      <FitAll points={allPoints} />
-      {journeys.map((j, idx) => {
+      {plateTrail.length === 0 && <FitAll points={allPoints} />}
+      <PlateTrailLayer trail={plateTrail} />
+      {plateTrail.length === 0 && journeys.map((j, idx) => {
         const pts = (j.sightings ?? [])
           .filter(s => s.lat != null && s.lng != null)
           .sort((a, b) => new Date(a.seenAt).getTime() - new Date(b.seenAt).getTime())
