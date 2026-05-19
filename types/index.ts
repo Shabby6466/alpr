@@ -146,3 +146,25 @@ export interface HealthStatus {
   modelPath: string
   error?: string
 }
+
+export interface JourneySighting {
+  id: string
+  cameraId?: string
+  cameraName?: string
+  zone?: string
+  lat?: number
+  lng?: number
+  seenAt: string
+  thumbnailBase64?: string
+  confidence: number
+  detectionEventId?: string
+}
+
+export interface Journey {
+  id: string
+  plateText: string
+  status: 'active' | 'closed'
+  startedAt: string
+  lastSeenAt: string
+  sightings: JourneySighting[]
+}
