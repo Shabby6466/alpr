@@ -6,6 +6,8 @@ export interface VehicleInfo {
   make?: string
   model?: string
   color?: string
+  type?: string
+  view?: string
   thumbnail?: string
   confidence: number
   boundingBox: BoundingBox

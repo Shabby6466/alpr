@@ -3,7 +3,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import TopBar from '@/components/ui/TopBar'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
-import { DetectionResult, PlateResult, FaceResult } from '@/types'
+import { DetectionResult, VehicleInfo } from '@/types'
 import {
   Upload, Video, Car, X, Play, CheckCircle,
   Activity, User, Square, Globe, AlertTriangle, Pause,
@@ -39,6 +39,37 @@ function RegionSelect({ value, onChange, disabled }: { value: string; onChange: 
         <option value="ASIAN">Asian (East Asia)</option>
         <option value="PACIFIC">Pacific</option>
       </select>
+    </div>
+  )
+}
+
+// ─── Recognition result card (mimics Plate Recognizer layout) ───────────────
+interface RecRow { label: string; value: string; conf?: number; alert?: boolean }
+
+function RecognitionCard({ title, rows, thumbnail, alert: isAlert }: {
+  title: string; rows: RecRow[]; thumbnail?: string; alert?: boolean
+}) {
+  return (
+    <div className="rounded-xl overflow-hidden border border-slate-100 shadow-sm">
+      <div className="px-4 py-2" style={{ background: isAlert ? '#FF3B30' : '#1D1D1F' }}>
+        <span className="text-[11px] font-black text-white uppercase tracking-wider">{title}</span>
+      </div>
+      {thumbnail && (
+        <div className="bg-slate-50 px-3 pt-2">
+          <img src={`data:image/jpeg;base64,${thumbnail}`} alt={title}
+            className="w-full h-20 object-contain rounded-lg" />
+        </div>
+      )}
+      {rows.map((row, i) => (
+        <div key={i} className="flex items-center justify-between px-4 py-2.5 bg-white"
+          style={{ borderTop: (i > 0 || thumbnail) ? '1px solid #F2F2F7' : undefined }}>
+          <span className="text-xs text-slate-400 font-medium flex-shrink-0 w-24">{row.label}</span>
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-bold capitalize ${row.alert ? 'text-[#FF3B30]' : 'text-[#1D1D1F]'}`}>{row.value}</span>
+            {row.conf !== undefined && <ConfBadge v={row.conf} />}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -133,6 +164,8 @@ function ImageDetector() {
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const [region, setRegion] = useState('NORTH_AMERICAN')
+  const imgRef = useRef<HTMLImageElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const handleFile = (f: File) => { setFile(f); setResult(null); setPreview(URL.createObjectURL(f)) }
   const clear = () => { setFile(null); setPreview(null); setResult(null) }
@@ -150,40 +183,97 @@ function ImageDetector() {
     finally { setLoading(false) }
   }
 
+  const paintBoxes = useCallback(() => {
+    const img = imgRef.current
+    const canvas = canvasRef.current
+    if (!img || !canvas || !result) return
+    const dpr = window.devicePixelRatio || 1
+    const w = img.clientWidth, h = img.clientHeight
+    canvas.width = w * dpr; canvas.height = h * dpr
+    const ctx = canvas.getContext('2d')!
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, w, h)
+    const sx = w / img.naturalWidth, sy = h / img.naturalHeight
+    ctx.lineWidth = 2.5
+    ctx.font = 'bold 11px system-ui,-apple-system,sans-serif'
+    ctx.textBaseline = 'alphabetic'
+    const drawBox = (x: number, y: number, bw: number, bh: number, stroke: string, fill: string, label: string) => {
+      const rx = x * sx, ry = y * sy, rw = bw * sx, rh = bh * sy
+      ctx.strokeStyle = stroke; ctx.fillStyle = fill
+      ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, 3); ctx.fill(); ctx.stroke()
+      if (label) {
+        const tw = ctx.measureText(label).width + 10
+        ctx.fillStyle = stroke
+        ctx.beginPath(); ctx.roundRect(rx, Math.max(0, ry - 18), tw, 18, [3,3,0,0]); ctx.fill()
+        ctx.fillStyle = '#fff'; ctx.fillText(label, rx + 5, Math.max(13, ry - 4))
+      }
+    }
+    for (const v of result.vehicles ?? [])
+      drawBox(v.boundingBox.x, v.boundingBox.y, v.boundingBox.width, v.boundingBox.height,
+        '#FF9500', 'rgba(255,149,0,0.10)', [v.make, v.model].filter(Boolean).join(' '))
+    for (const p of result.plates ?? [])
+      drawBox(p.boundingBox.x, p.boundingBox.y, p.boundingBox.width, p.boundingBox.height,
+        '#007AFF', 'rgba(0,122,255,0.12)', `${p.text}  ${Math.round(p.confidence * 100)}%`)
+    for (const f of result.faces ?? []) {
+      const spoof = (f as any).spoofDetected
+      drawBox(f.boundingBox.x, f.boundingBox.y, f.boundingBox.width, f.boundingBox.height,
+        spoof ? '#FF3B30' : '#30D158', spoof ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)',
+        (f as any).personName ?? `Face ${Math.round(f.confidence * 100)}%`)
+    }
+    if (result.gunDetected) {
+      ctx.strokeStyle = '#FF3B30'; ctx.lineWidth = 5
+      ctx.strokeRect(3, 3, w - 6, h - 6)
+    }
+  }, [result])
+
+  useEffect(() => { if (result) paintBoxes() }, [result, paintBoxes])
+
+  const vehicleRows = (v: VehicleInfo): RecRow[] => [
+    v.type    ? { label: 'Type',       value: v.type,                                conf: v.confidence } : null,
+    (v.make || v.model) ? { label: 'Make/model', value: [v.make, v.model].filter(Boolean).join(' ') } : null,
+    v.color   ? { label: 'Color',      value: v.color } : null,
+    v.view    ? { label: 'View',       value: v.view } : null,
+    !v.type   ? { label: 'Confidence', value: `${Math.round(v.confidence * 100)}%` } : null,
+  ].filter(Boolean) as RecRow[]
+
   return (
     <div className="space-y-5">
-      <div
-        className={`relative border-2 border-dashed rounded-3xl p-10 text-center transition-all duration-300 ${dragging ? 'drop-active' : ''}`}
-        style={file ? { background: 'white', borderColor: '#007AFF', borderStyle: 'solid' } : { background: 'rgba(255,255,255,0.5)', borderColor: 'rgba(60,60,67,0.1)' }}
-        onDragOver={e => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
-        onClick={() => !file && inputRef.current?.click()}>
-        <input ref={inputRef} type="file" accept="image/*" className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-        {preview ? (
-          <div className="relative group">
-            <img src={preview} alt="preview" className="max-h-64 mx-auto rounded-2xl shadow-lg object-contain bg-slate-50" />
-            <button onClick={e => { e.stopPropagation(); clear() }}
-              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-slate-400 hover:text-red-500">
-              <X size={16} strokeWidth={2.5} />
-            </button>
-          </div>
-        ) : (
-          <div className="py-6">
-            <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center shadow-sm"
-              style={{ background: 'linear-gradient(135deg,rgba(0,122,255,0.1),rgba(0,122,255,0.05))' }}>
-              <Upload size={28} className="text-[#007AFF]" strokeWidth={2} />
+      {/* Drop zone — hidden once result is shown */}
+      {!result && (
+        <div
+          className={`relative border-2 border-dashed rounded-3xl p-10 text-center transition-all duration-300 ${dragging ? 'drop-active' : ''}`}
+          style={file ? { background: 'white', borderColor: '#007AFF', borderStyle: 'solid' } : { background: 'rgba(255,255,255,0.5)', borderColor: 'rgba(60,60,67,0.1)' }}
+          onDragOver={e => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+          onClick={() => !file && inputRef.current?.click()}>
+          <input ref={inputRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+          {preview ? (
+            <div className="relative group">
+              <img src={preview} alt="preview" className="max-h-64 mx-auto rounded-2xl shadow-lg object-contain bg-slate-50" />
+              <button onClick={e => { e.stopPropagation(); clear() }}
+                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-slate-400 hover:text-red-500">
+                <X size={16} strokeWidth={2.5} />
+              </button>
             </div>
-            <p className="text-lg font-bold tracking-tight" style={{ color: '#1D1D1F' }}>Upload Image</p>
-            <p className="text-sm mt-1.5" style={{ color: '#8E8E93' }}>Drag and drop or click to browse</p>
-            <div className="mt-6 flex items-center justify-center gap-3">
-              {['JPG','PNG','20MB MAX'].map(l => <span key={l} className="px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-400 rounded">{l}</span>)}
+          ) : (
+            <div className="py-6">
+              <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center shadow-sm"
+                style={{ background: 'linear-gradient(135deg,rgba(0,122,255,0.1),rgba(0,122,255,0.05))' }}>
+                <Upload size={28} className="text-[#007AFF]" strokeWidth={2} />
+              </div>
+              <p className="text-lg font-bold tracking-tight" style={{ color: '#1D1D1F' }}>Upload Image</p>
+              <p className="text-sm mt-1.5" style={{ color: '#8E8E93' }}>Drag and drop or click to browse</p>
+              <div className="mt-6 flex items-center justify-center gap-3">
+                {['JPG','PNG','20MB MAX'].map(l => <span key={l} className="px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-400 rounded">{l}</span>)}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-      {file && (
+          )}
+        </div>
+      )}
+
+      {file && !result && (
         <div className="flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2">
           <RegionSelect value={region} onChange={setRegion} />
           <button onClick={detect} disabled={loading}
@@ -193,48 +283,73 @@ function ImageDetector() {
           </button>
         </div>
       )}
+
       {result && (
-        <div className="space-y-5 animate-in fade-in zoom-in-95 duration-300">
-          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl"
-            style={{ background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.15)' }}>
-            <CheckCircle size={16} className="text-[#30D158]" />
-            <span className="text-sm font-bold text-[#248A3D]">
-              {result.plates.length} plates · {result.faces.length} faces · {result.processingTimeMs}ms
-            </span>
+        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+          {/* Status bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl"
+              style={{ background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.15)' }}>
+              <CheckCircle size={15} className="text-[#30D158]" />
+              <span className="text-sm font-bold text-[#248A3D]">
+                {result.plates.length} plates · {result.faces.length} faces · {result.vehicles.length} vehicles · {result.processingTimeMs}ms
+              </span>
+            </div>
+            <button onClick={clear}
+              className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-slate-700 px-3 py-2 rounded-xl hover:bg-slate-100 transition-all">
+              <X size={14} strokeWidth={2.5} /> New Image
+            </button>
           </div>
-          {result.plates.length > 0 || result.faces.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          {/* Two-column: annotated image + results panel */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            {/* Left: image with bounding box overlay */}
+            <div className="relative inline-block w-full rounded-2xl overflow-hidden bg-slate-900 shadow-xl">
+              <img
+                ref={imgRef}
+                src={preview!}
+                alt="detection result"
+                className="block w-full h-auto"
+                style={{ maxHeight: 500, objectFit: 'contain' }}
+                onLoad={paintBoxes}
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 pointer-events-none"
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
+
+            {/* Right: structured recognition results */}
+            <div className="space-y-3 overflow-y-auto" style={{ maxHeight: 500 }}>
+              {result.vehicles.map((v, i) => (
+                <RecognitionCard key={`v-${i}`} title="Vehicle" rows={vehicleRows(v)} />
+              ))}
               {result.plates.map((p, i) => (
-                <div key={i} style={appleCard} className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="plate-badge text-base">{p.text}</span>
-                    <ConfBadge v={p.confidence} />
-                  </div>
-                  {p.thumbnail && <img src={`data:image/jpeg;base64,${p.thumbnail}`} alt={p.text} className="w-full h-24 object-contain rounded-xl" style={{ background: '#F2F2F7' }} />}
-                  {(p as any).personName && <div className="flex items-center gap-1.5 text-xs font-bold px-2 py-1.5 rounded-md" style={{ color: '#007AFF', background: 'rgba(0,122,255,0.05)' }}><User size={12} />{(p as any).personName}</div>}
-                </div>
+                <RecognitionCard key={`p-${i}`} title="License Plate" thumbnail={p.thumbnail} rows={[
+                  { label: 'Number',  value: p.text,    conf: p.confidence },
+                  ...(p.region      ? [{ label: 'Country', value: p.region }]      : []),
+                  ...(p.personName  ? [{ label: 'Person',  value: p.personName }]  : []),
+                ]} />
               ))}
               {result.faces.map((f, i) => (
-                <div key={i} style={appleCard} className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(145deg,#007AFF,#0055D4)' }}>
-                        <User size={15} className="text-white" />
-                      </div>
-                      <span className="font-bold text-sm">{(f as any).personName || 'Unknown'}</span>
-                    </div>
-                    <ConfBadge v={f.confidence} />
-                  </div>
-                  {f.thumbnail && <img src={`data:image/jpeg;base64,${f.thumbnail}`} alt="Face" className="w-full h-36 object-cover rounded-xl" />}
-                </div>
+                <RecognitionCard key={`f-${i}`} title="Face" thumbnail={f.thumbnail} rows={[
+                  { label: 'Confidence', value: `${Math.round(f.confidence * 100)}%` },
+                  ...((f as any).personName  ? [{ label: 'Person', value: (f as any).personName }] : []),
+                  ...((f as any).spoofDetected ? [{ label: 'Spoof', value: 'Detected', alert: true }] : []),
+                ]} />
               ))}
+              {result.gunDetected && (
+                <RecognitionCard title="⚠ Weapon Detected" rows={[]} alert />
+              )}
+              {result.vehicles.length === 0 && result.plates.length === 0 && result.faces.length === 0 && !result.gunDetected && (
+                <div className="py-12 text-center rounded-2xl bg-white shadow-sm">
+                  <Activity size={32} className="mx-auto mb-3 text-slate-200" />
+                  <p className="text-sm font-semibold text-slate-400">No objects identified</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="py-12 text-center" style={appleCard}>
-              <Activity size={32} className="mx-auto mb-3 text-slate-200" />
-              <p className="text-sm font-semibold text-slate-400">No objects identified</p>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>
@@ -785,7 +900,7 @@ export default function DetectPage() {
     <div className="min-h-screen bg-[#F2F2F7]">
       <TopBar title="Detection Intelligence" subtitle="Multimedia processing engine" connected={tab === 'live'} />
       <main className="flex-1 p-6">
-        <div className={`mx-auto space-y-6 transition-all ${tab === 'video' ? 'max-w-6xl' : 'max-w-4xl'}`}>
+        <div className={`mx-auto space-y-6 transition-all ${tab === 'live' ? 'max-w-4xl' : 'max-w-6xl'}`}>
           <div className="flex p-1 bg-white/50 backdrop-blur-md rounded-2xl w-fit mx-auto shadow-sm border border-white/50">
             {tabs.map(t => {
               const active = tab === t.id

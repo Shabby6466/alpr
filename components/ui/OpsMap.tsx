@@ -1,0 +1,170 @@
+'use client'
+import { useEffect } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import { Camera, Journey } from '@/types'
+
+const TRAIL_COLORS = ['#e8a000', '#d93a3a', '#2f7fc1', '#2db55d', '#9b59b6', '#e67e22']
+
+function injectStyles() {
+  if (typeof document === 'undefined' || document.getElementById('opsmap-styles')) return
+  const s = document.createElement('style')
+  s.id = 'opsmap-styles'
+  s.textContent = `
+    @keyframes opsmap-pulse {
+      0% { transform: scale(1); opacity: 0.7; }
+      100% { transform: scale(2.8); opacity: 0; }
+    }
+    @keyframes opsmap-move {
+      to { stroke-dashoffset: -120; }
+    }
+    .opsmap-trail-anim { animation: opsmap-move 2s linear infinite; }
+    .leaflet-container { background: #0a0c0e !important; }
+    .leaflet-popup-content-wrapper {
+      background: #12161a !important;
+      border: 1px solid #e8a000 !important;
+      border-radius: 0 !important;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.8) !important;
+      color: #c8d0d8 !important;
+    }
+    .leaflet-popup-tip { background: #12161a !important; }
+    .leaflet-zoom-box { border-color: #e8a000 !important; }
+    .leaflet-control-zoom a {
+      background: #12161a !important;
+      color: #e8a000 !important;
+      border-color: #222831 !important;
+      border-radius: 0 !important;
+    }
+    .leaflet-control-zoom a:hover { background: #181d22 !important; }
+  `
+  document.head.appendChild(s)
+}
+
+function makeCameraIcon(streaming: boolean, hasAlert: boolean) {
+  const color = hasAlert ? '#d93a3a' : streaming ? '#2db55d' : '#78899a'
+  const label = hasAlert ? '!' : streaming ? '▶' : '✕'
+  const ring = streaming || hasAlert
+    ? `<div style="position:absolute;inset:-5px;border-radius:50%;border:1px solid ${color};animation:opsmap-pulse 1.8s ease-out infinite;opacity:0.6;"></div>`
+    : ''
+  return L.divIcon({
+    className: '',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -16],
+    html: `<div style="width:24px;height:24px;position:relative;display:flex;align-items:center;justify-content:center;">
+      ${ring}
+      <div style="
+        width:20px;height:20px;
+        background:#12161a;
+        border:1.5px solid ${color};
+        display:flex;align-items:center;justify-content:center;
+        position:relative;z-index:1;
+        box-shadow:0 0 8px ${color}44;
+      ">
+        <span style="font-size:8px;color:${color};font-family:monospace;font-weight:700;">${label}</span>
+      </div>
+    </div>`,
+  })
+}
+
+function JourneyTrail({ points, color }: { points: [number, number][]; color: string }) {
+  const map = useMap()
+  useEffect(() => {
+    if (points.length < 2) return
+    const glow = L.polyline(points, { color, weight: 10, opacity: 0.12, lineJoin: 'round', lineCap: 'round' }).addTo(map)
+    const trail = L.polyline(points, { color, weight: 2, opacity: 0.85, lineJoin: 'round', lineCap: 'round' }).addTo(map)
+    const dashed = L.polyline(points, {
+      color: '#fff', weight: 1, opacity: 0.5,
+      dashArray: '8 16', lineJoin: 'round', lineCap: 'round',
+    }).addTo(map)
+    const el = (dashed as any)._path as SVGPathElement | undefined
+    if (el) el.classList.add('opsmap-trail-anim')
+    return () => { glow.remove(); trail.remove(); dashed.remove() }
+  }, [map, JSON.stringify(points), color])
+  return null
+}
+
+function FitAll({ points }: { points: [number, number][] }) {
+  const map = useMap()
+  useEffect(() => {
+    if (points.length === 0) return
+    if (points.length === 1) { map.setView(points[0], 15); return }
+    map.fitBounds(L.latLngBounds(points), { padding: [50, 50], maxZoom: 15, animate: false })
+  }, [map, JSON.stringify(points)])
+  return null
+}
+
+export default function OpsMap({ cameras, journeys }: { cameras: Camera[]; journeys: Journey[] }) {
+  useEffect(() => { injectStyles() }, [])
+
+  const camerasWithGps = cameras.filter(c => c.lat != null && c.lng != null)
+  const allPoints: [number, number][] = camerasWithGps.map(c => [c.lat!, c.lng!])
+  journeys.forEach(j =>
+    (j.sightings ?? []).forEach(s => {
+      if (s.lat != null && s.lng != null) allPoints.push([s.lat, s.lng])
+    }),
+  )
+  const center: [number, number] = allPoints.length > 0
+    ? allPoints[Math.floor(allPoints.length / 2)]
+    : [33.6150, 73.0600]
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={allPoints.length === 0 ? 12 : 13}
+      style={{ width: '100%', height: '100%' }}
+      zoomControl
+      attributionControl={false}
+    >
+      <TileLayer
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        subdomains="abcd"
+        maxZoom={20}
+      />
+      <FitAll points={allPoints} />
+      {journeys.map((j, idx) => {
+        const pts = (j.sightings ?? [])
+          .filter(s => s.lat != null && s.lng != null)
+          .sort((a, b) => new Date(a.seenAt).getTime() - new Date(b.seenAt).getTime())
+          .map(s => [s.lat!, s.lng!] as [number, number])
+        if (pts.length < 2) return null
+        return <JourneyTrail key={j.id} points={pts} color={TRAIL_COLORS[idx % TRAIL_COLORS.length]} />
+      })}
+      {camerasWithGps.map(cam => (
+        <Marker key={cam.id} position={[cam.lat!, cam.lng!]} icon={makeCameraIcon(cam.streaming ?? false, false)}>
+          <Popup minWidth={180}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", padding: '4px 0' }}>
+              <p style={{ fontWeight: 700, fontSize: 11, color: '#e8a000', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {cam.name}
+              </p>
+              {cam.zone && (
+                <p style={{ fontSize: 10, color: '#78899a', margin: '0 0 4px' }}>{cam.zone}</p>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                  color: cam.streaming ? '#2db55d' : '#d93a3a',
+                  padding: '1px 6px', border: `1px solid ${cam.streaming ? '#2db55d44' : '#d93a3a44'}`,
+                }}>
+                  {cam.streaming ? 'LIVE' : 'OFFLN'}
+                </span>
+                {cam.lat != null && (
+                  <span style={{ fontSize: 9, color: '#3d4f5e' }}>
+                    {cam.lat.toFixed(3)}, {cam.lng!.toFixed(3)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+      <div style={{
+        position: 'absolute', bottom: 6, right: 10, zIndex: 800,
+        fontSize: 8, color: '#3d4f5e', pointerEvents: 'none',
+        fontFamily: 'monospace',
+      }}>
+        © CartoDB © OpenStreetMap
+      </div>
+    </MapContainer>
+  )
+}
