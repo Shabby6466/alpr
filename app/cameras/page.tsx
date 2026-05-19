@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import useSWR, { mutate } from 'swr'
 import TopBar from '@/components/ui/TopBar'
 import Modal from '@/components/ui/Modal'
@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
 import { Camera } from '@/types'
 import {
   Video, Plus, Trash2, Power, Edit3, Wifi, WifiOff,
-  FileVideo, X, MapPin, Upload, Route, Play, Square,
+  FileVideo, X, MapPin, Upload, Route, Play, Square, Pause,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -51,123 +51,244 @@ function StatusDot({ active, streaming }: { active: boolean; streaming?: boolean
 
 // ── Test Video Panel ────────────────────────────────────────────────────────
 
-interface DetectedPlate {
-  text: string
-  confidence: number
-  thumbnail?: string
-  frameIndex: number
+// ─── Canvas overlay renderer (mirrors detect page paintOverlay exactly) ────────
+function paintOverlay(canvas: HTMLCanvasElement, video: HTMLVideoElement, det: any | null) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const dpr  = window.devicePixelRatio || 1
+  const cssW = canvas.clientWidth
+  const cssH = canvas.clientHeight
+  if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+    canvas.width  = cssW * dpr
+    canvas.height = cssH * dpr
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, cssW, cssH)
+  if (!det || video.videoWidth === 0) return
+  const vAR = video.videoWidth / video.videoHeight
+  const cAR = cssW / cssH
+  let rW = cssW, rH = cssH, oX = 0, oY = 0
+  if (vAR > cAR) { rH = cssW / vAR; oY = (cssH - rH) / 2 }
+  else            { rW = cssH * vAR; oX = (cssW - rW) / 2 }
+  const sx = rW / video.videoWidth
+  const sy = rH / video.videoHeight
+  ctx.lineWidth = 2.5
+  ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
+  ctx.textBaseline = 'alphabetic'
+  const box = (x: number, y: number, w: number, h: number, stroke: string, fill: string, label: string) => {
+    const rx = oX + x * sx, ry = oY + y * sy, rw = w * sx, rh = h * sy
+    ctx.strokeStyle = stroke; ctx.fillStyle = fill
+    ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, 3); ctx.fill(); ctx.stroke()
+    if (label) {
+      const tw = ctx.measureText(label).width + 10
+      ctx.fillStyle = stroke
+      ctx.beginPath(); ctx.roundRect(rx, Math.max(0, ry - 18), tw, 18, [3, 3, 0, 0]); ctx.fill()
+      ctx.fillStyle = '#fff'; ctx.fillText(label, rx + 5, Math.max(13, ry - 4))
+    }
+  }
+  for (const v of det.vehicles ?? []) {
+    box(v.boundingBox.x, v.boundingBox.y, v.boundingBox.width, v.boundingBox.height,
+      '#FF9500', 'rgba(255,149,0,0.10)', [v.make, v.model].filter(Boolean).join(' '))
+  }
+  for (const p of det.plates ?? []) {
+    box(p.boundingBox.x, p.boundingBox.y, p.boundingBox.width, p.boundingBox.height,
+      '#007AFF', 'rgba(0,122,255,0.12)', `${p.text}  ${Math.round(p.confidence * 100)}%`)
+  }
+  for (const f of det.faces ?? []) {
+    const spoof = f.spoofDetected
+    box(f.boundingBox.x, f.boundingBox.y, f.boundingBox.width, f.boundingBox.height,
+      spoof ? '#FF3B30' : '#30D158',
+      spoof ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)',
+      f.personName ?? `Face ${Math.round(f.confidence * 100)}%`)
+  }
+  if (det.gunDetected) {
+    ctx.strokeStyle = '#FF3B30'; ctx.lineWidth = 5
+    ctx.strokeRect(3, 3, cssW - 6, cssH - 6)
+    ctx.fillStyle = 'rgba(255,59,48,0.08)'; ctx.fillRect(0, 0, cssW, cssH)
+    ctx.fillStyle = 'rgba(255,59,48,0.9)'
+    ctx.beginPath(); ctx.roundRect(10, 10, 200, 26, 4); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px system-ui'
+    ctx.fillText('⚠  WEAPON DETECTED', 16, 27)
+  }
 }
 
 function TestVideoPanel({ camera, onClose }: { camera: Camera; onClose: () => void }) {
-  const [file, setFile] = useState<File | null>(null)
-  const [videoSrc, setVideoSrc] = useState<string | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [frames, setFrames] = useState(0)
-  const [plates, setPlates] = useState<DetectedPlate[]>([])
-  const [errorMsg, setErrorMsg] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
-  const abortRef = useRef<AbortController | null>(null)
-  const { toast } = useToast()
+  const [file, setFile]           = useState<File | null>(null)
+  const [videoUrl, setVideoUrl]   = useState<string | null>(null)
+  const [dragging, setDragging]   = useState(false)
+  const [active, setActive]       = useState(false)
+  const [paused, setPaused]       = useState(false)
+  const [loopCount, setLoopCount] = useState(0)
+  const [uniquePlates, setUniquePlates] = useState(0)
+  const [detFps, setDetFps]       = useState(0)
+  const [feedFrames, setFeedFrames] = useState<Array<{ plates: any[]; videoTime: number }>>([])
+  const [lastFilename, setLastFilename] = useState<string | null>(null)
 
-  // Clean up object URL on unmount
-  useEffect(() => () => { if (videoSrc) URL.revokeObjectURL(videoSrc) }, [videoSrc])
+  const fileInputRef  = useRef<HTMLInputElement>(null)
+  const videoRef      = useRef<HTMLVideoElement>(null)
+  const canvasRef     = useRef<HTMLCanvasElement>(null)   // visible overlay
+  const captureRef    = useRef<HTMLCanvasElement>(null)   // hidden, frame capture
+  const activeRef     = useRef(false)
+  const processingRef = useRef(false)
+  const lastCapRef    = useRef(-1)
+  const lastDetRef    = useRef<any>(null)
+  const detMapRef     = useRef(new Map<number, any>())
+  const allPlatesRef  = useRef(new Set<string>())
+  const rafRef        = useRef<number | null>(null)
+  const sessionIdRef  = useRef<string | null>(null)
+  const fpsWindowRef  = useRef<number[]>([])
+  const { toast }     = useToast()
 
-  function pick(f: File) {
-    if (videoSrc) URL.revokeObjectURL(videoSrc)
-    setFile(f)
-    setVideoSrc(URL.createObjectURL(f))
-    setPlates([])
-    setFrames(0)
-    setStatus('idle')
-    setErrorMsg('')
-  }
+  const STORAGE_KEY  = `testVideo_${camera.id}`
+  const MIN_INTERVAL = 0.15
+  const JPEG_QUALITY = 0.88
 
-  function stop() {
-    abortRef.current?.abort()
-    setStatus('done')
-  }
-
-  async function run() {
-    if (!file) return
-    abortRef.current = new AbortController()
-    setStatus('running')
-    setPlates([])
-    setFrames(0)
-    setErrorMsg('')
-
-    // Map: plate text → best (highest confidence) DetectedPlate
-    const bestPlates = new Map<string, DetectedPlate>()
-
-    try {
-      const form = new FormData()
-      form.append('video', file)
-
-      const res = await fetch(`/api/cameras/${camera.id}/test-video`, {
-        method: 'POST',
-        body: form,
-        signal: abortRef.current.signal,
-      })
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => '')
-        throw new Error(`Server error ${res.status}${body ? ': ' + body : ''}`)
-      }
-      if (!res.body) throw new Error('No response body')
-
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      let buf = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += dec.decode(value, { stream: true })
-        const chunks = buf.split('\n\n')
-        buf = chunks.pop() ?? ''
-
-        for (const chunk of chunks) {
-          const lines = chunk.split('\n')
-          const eventType = lines.find(l => l.startsWith('event:'))?.slice(6).trim()
-          const dataLine  = lines.find(l => l.startsWith('data:'))?.slice(5).trim()
-          if (!dataLine) continue
-
-          const data = JSON.parse(dataLine)
-
-          if (eventType === 'detection') {
-            const fi: number = data.frameIndex ?? 0
-            for (const p of (data.plates ?? []) as any[]) {
-              const existing = bestPlates.get(p.text)
-              if (!existing || p.confidence > existing.confidence) {
-                bestPlates.set(p.text, {
-                  text: p.text,
-                  confidence: p.confidence,
-                  thumbnail: p.thumbnail,
-                  frameIndex: fi,
-                })
-              }
-            }
-            setFrames(fi + 1)
-            setPlates([...bestPlates.values()])
-          } else if (eventType === 'done') {
-            setFrames(data.frames ?? 0)
-            setStatus('done')
-          } else if (eventType === 'error') {
-            setErrorMsg(data.error ?? 'Unknown error')
-            setStatus('error')
-          }
-        }
-      }
-    } catch (e: any) {
-      if (e.name === 'AbortError') return
-      setErrorMsg(e.message ?? 'Upload failed')
-      setStatus('error')
-      toast(e.message ?? 'Test failed', 'error')
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) setLastFilename(saved)
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
+  }, [STORAGE_KEY])
+
+  const flushSession = useCallback(async (sid: string) => {
+    try { await fetch(`/api/alpr/sessions/${sid}/flush`, { method: 'POST' }) } catch {}
+  }, [])
+
+  const captureFrame = useCallback((videoTime: number) => {
+    const video   = videoRef.current
+    const capture = captureRef.current
+    if (!video || !capture || video.videoWidth === 0) return
+    processingRef.current = true
+    lastCapRef.current = videoTime
+    const ctx = capture.getContext('2d')!
+    capture.width  = video.videoWidth
+    capture.height = video.videoHeight
+    ctx.drawImage(video, 0, 0)
+    capture.toBlob(async (blob) => {
+      if (!blob) { processingRef.current = false; return }
+      try {
+        const fd = new FormData()
+        fd.append('image', blob, 'frame.jpg')
+        const sid = sessionIdRef.current ? `&sessionId=${sessionIdRef.current}` : ''
+        const cid = `&cameraId=${encodeURIComponent(camera.id)}&cameraName=${encodeURIComponent(camera.name)}`
+        const res = await fetch(
+          `/api/alpr/detect?region=${camera.region}&maxPlates=10&thumbnail=true${sid}${cid}`,
+          { method: 'POST', body: fd },
+        )
+        if (!res.ok) return
+        const result = await res.json()
+        lastDetRef.current = result
+        detMapRef.current.set(videoTime, result)
+        result.plates?.forEach((p: any) => allPlatesRef.current.add(p.text))
+        setUniquePlates(allPlatesRef.current.size)
+        const now = Date.now()
+        fpsWindowRef.current.push(now)
+        fpsWindowRef.current = fpsWindowRef.current.filter(t => now - t < 3000)
+        setDetFps(Math.round(fpsWindowRef.current.length / 3))
+        if (result.plates?.length || result.faces?.length || result.gunDetected) {
+          setFeedFrames(prev => [{ plates: result.plates ?? [], videoTime }, ...prev].slice(0, 60))
+        }
+      } catch {
+        // network blip — skip frame
+      } finally {
+        processingRef.current = false
+      }
+    }, 'image/jpeg', JPEG_QUALITY)
+  }, [camera.id, camera.name, camera.region])
+
+  const startLoop = useCallback(() => {
+    const loop = () => {
+      const video  = videoRef.current
+      const canvas = canvasRef.current
+      if (!video || !canvas) return
+      if (activeRef.current && !video.paused && !video.ended && !processingRef.current) {
+        const t = video.currentTime
+        if (t - lastCapRef.current >= MIN_INTERVAL) captureFrame(t)
+      }
+      paintOverlay(canvas, video, lastDetRef.current)
+      rafRef.current = requestAnimationFrame(loop)
+    }
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(loop)
+  }, [captureFrame])
+
+  const stopLoop = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+  }, [])
+
+  const handleFile = (f: File) => {
+    stopLoop()
+    if (videoUrl) URL.revokeObjectURL(videoUrl)
+    activeRef.current = false; processingRef.current = false
+    lastCapRef.current = -1; lastDetRef.current = null
+    detMapRef.current.clear(); allPlatesRef.current.clear(); fpsWindowRef.current = []
+    setVideoUrl(URL.createObjectURL(f))
+    setFile(f)
+    setActive(false); setPaused(false); setLoopCount(0)
+    setUniquePlates(0); setDetFps(0); setFeedFrames([])
+    localStorage.setItem(STORAGE_KEY, f.name)
+    setLastFilename(f.name)
   }
 
-  const running = status === 'running'
-  const done    = status === 'done' || status === 'error'
+  const clearFile = () => {
+    stopLoop()
+    activeRef.current = false
+    if (sessionIdRef.current) { flushSession(sessionIdRef.current); sessionIdRef.current = null }
+    if (videoUrl) URL.revokeObjectURL(videoUrl)
+    setFile(null); setVideoUrl(null); setActive(false); setPaused(false)
+    setLoopCount(0); setUniquePlates(0); setDetFps(0); setFeedFrames([])
+  }
+
+  const startAnalysis = () => {
+    const video = videoRef.current
+    if (!video) return
+    sessionIdRef.current = crypto.randomUUID()
+    processingRef.current = false; lastCapRef.current = -1; lastDetRef.current = null
+    detMapRef.current.clear(); allPlatesRef.current.clear(); fpsWindowRef.current = []
+    setLoopCount(0); setUniquePlates(0); setDetFps(0); setFeedFrames([])
+    activeRef.current = true
+    setActive(true); setPaused(false)
+    video.currentTime = 0
+    video.play()
+    startLoop()
+  }
+
+  const togglePause = () => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) { video.play(); setPaused(false) }
+    else              { video.pause(); setPaused(true) }
+  }
+
+  const stopAnalysis = () => {
+    activeRef.current = false
+    setActive(false); setPaused(false)
+    videoRef.current?.pause()
+    if (sessionIdRef.current) { flushSession(sessionIdRef.current); sessionIdRef.current = null }
+  }
+
+  // On video end: flush session, start new loop
+  const handleEnded = useCallback(async () => {
+    if (!activeRef.current) return
+    if (sessionIdRef.current) await flushSession(sessionIdRef.current)
+    setLoopCount(n => n + 1)
+    sessionIdRef.current = crypto.randomUUID()
+    processingRef.current = false; lastCapRef.current = -1; lastDetRef.current = null
+    detMapRef.current.clear(); fpsWindowRef.current = []
+    const video = videoRef.current
+    if (video && activeRef.current) { video.currentTime = 0; video.play() }
+  }, [flushSession])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.addEventListener('ended', handleEnded)
+    return () => video.removeEventListener('ended', handleEnded)
+  }, [handleEnded, videoUrl])
+
+  // Cleanup object URL on unmount
+  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl) }, [videoUrl])
 
   return (
     <div className="mt-3 rounded-2xl overflow-hidden border border-slate-100 animate-in slide-in-from-top-2 duration-200"
@@ -185,102 +306,123 @@ function TestVideoPanel({ camera, onClose }: { camera: Camera; onClose: () => vo
             <MapPin size={8} />{camera.zone}
           </span>
         )}
-        {!camera.lat && (
-          <span className="text-[10px] text-[#FF9500] font-medium ml-1">
-            No GPS set — edit camera to enable map
-          </span>
-        )}
-        <button onClick={onClose} className="ml-auto p-1 rounded-lg hover:bg-slate-200 transition-colors">
-          <X size={14} className="text-slate-400" />
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {active && (
+            <span className="flex items-center gap-1.5 text-[10px] font-bold" style={{ color: '#30D158' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#30D158] pulse-dot" />
+              Loop {loopCount + 1}
+            </span>
+          )}
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-200 transition-colors">
+            <X size={14} className="text-slate-400" />
+          </button>
+        </div>
       </div>
 
       <div className="p-4">
-        <div className="flex gap-4" style={{ minHeight: 240 }}>
+        <div className="flex gap-4">
 
-          {/* Left: video preview + drop zone */}
-          <div className="flex-shrink-0 w-64 flex flex-col gap-3">
-            {videoSrc ? (
+          {/* Left: video + controls */}
+          <div className="flex-shrink-0 flex flex-col gap-2" style={{ width: 296 }}>
+
+            {/* Video / drop zone */}
+            {videoUrl ? (
               <div className="relative rounded-xl overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-                <video
-                  src={videoSrc}
-                  className="w-full h-full object-contain"
-                  controls={!running}
-                  muted
-                />
-                {running && (
-                  <div className="absolute inset-0 flex items-end justify-start p-2 pointer-events-none">
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-white px-2 py-1 rounded-full"
-                      style={{ background: 'rgba(255,59,48,0.85)' }}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-white pulse-dot" />
-                      PROCESSING
-                    </span>
-                  </div>
-                )}
+                <video ref={videoRef} src={videoUrl} className="w-full h-full object-contain" muted />
+                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
               </div>
             ) : (
               <div
                 onDragOver={e => { e.preventDefault(); setDragging(true) }}
                 onDragLeave={() => setDragging(false)}
-                onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) pick(f) }}
-                onClick={() => fileRef.current?.click()}
-                className="flex-1 rounded-xl border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center gap-2 p-4"
+                onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-xl border-2 border-dashed cursor-pointer flex flex-col items-center justify-center gap-2 p-6 transition-all"
                 style={{
+                  aspectRatio: '16/9',
                   borderColor: dragging ? '#007AFF' : '#E5E5EA',
                   background: dragging ? 'rgba(0,122,255,0.04)' : 'white',
-                  minHeight: 140,
                 }}>
-                <Upload size={24} className="text-slate-300" />
-                <p className="text-xs font-bold text-slate-400 text-center">Drop video or click to browse</p>
+                <Upload size={22} className="text-slate-300" />
+                <p className="text-xs font-bold text-slate-400 text-center">Drop video or click</p>
+                {lastFilename && (
+                  <p className="text-[10px] text-slate-300 text-center truncate max-w-full px-2">
+                    Last: {lastFilename}
+                  </p>
+                )}
               </div>
             )}
-            <input ref={fileRef} type="file" accept="video/*" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) pick(f) }} />
+            <canvas ref={captureRef} className="hidden" />
+            <input ref={fileInputRef} type="file" accept="video/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
 
             {/* File info */}
             {file && (
-              <div className="rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(0,122,255,0.06)' }}>
-                <p className="font-bold text-slate-700 truncate">{file.name}</p>
-                <p className="text-slate-400">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+              <div className="rounded-xl px-3 py-2 text-xs flex items-center gap-2"
+                style={{ background: 'rgba(0,122,255,0.06)' }}>
+                <span className="font-bold text-slate-700 truncate flex-1">{file.name}</span>
+                <button onClick={clearFile} className="flex-shrink-0 text-slate-300 hover:text-slate-500 transition-colors">
+                  <X size={12} />
+                </button>
               </div>
             )}
 
-            {/* Status counter */}
-            {(running || done) && (
-              <div className="rounded-xl px-3 py-2 flex justify-between text-xs" style={{ background: '#F2F2F7' }}>
-                <span className="text-slate-400 font-medium">Frames</span>
-                <span className="font-black tabular-nums" style={{ color: '#007AFF' }}>{frames}</span>
+            {/* Controls */}
+            {file && (
+              <div className="flex gap-2">
+                {!active ? (
+                  <button onClick={startAnalysis}
+                    className="flex-1 h-9 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-all"
+                    style={{ background: '#007AFF' }}>
+                    <Play size={12} fill="currentColor" />
+                    Start Loop
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={togglePause}
+                      className="flex-1 h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                      style={{
+                        background: paused ? 'rgba(0,122,255,0.1)' : '#F2F2F7',
+                        color: paused ? '#007AFF' : '#3C3C43',
+                      }}>
+                      {paused
+                        ? <><Play size={12} fill="currentColor" /> Resume</>
+                        : <><Pause size={12} /> Pause</>
+                      }
+                    </button>
+                    <button onClick={stopAnalysis}
+                      className="h-9 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                      style={{ background: 'rgba(255,59,48,0.1)', color: '#FF3B30' }}>
+                      <Square size={12} fill="currentColor" />
+                      Stop
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
-            {/* Action button */}
-            {!running ? (
-              <button
-                disabled={!file}
-                onClick={run}
-                className="w-full h-9 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all disabled:opacity-40"
-                style={{ background: '#007AFF' }}>
-                <Play size={13} fill="currentColor" />
-                {done ? 'Run Again' : 'Start Test'}
-              </button>
-            ) : (
-              <button
-                onClick={stop}
-                className="w-full h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                style={{ background: 'rgba(255,59,48,0.1)', color: '#FF3B30' }}>
-                <Square size={12} fill="currentColor" />
-                Stop
-              </button>
+            {/* Stats */}
+            {active && (
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { label: 'Plates', value: uniquePlates, color: '#007AFF' },
+                  { label: 'Det/s',  value: detFps,       color: '#30D158' },
+                  { label: 'Loop',   value: loopCount + 1, color: '#5856D6' },
+                ] as const).map(s => (
+                  <div key={s.label} className="rounded-xl p-2 text-center" style={{ background: '#F2F2F7' }}>
+                    <p className="text-base font-black tabular-nums" style={{ color: s.color }}>{s.value}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{s.label}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
-          {/* Right: live detection feed */}
+          {/* Right: detection feed */}
           <div className="flex-1 flex flex-col gap-2 min-w-0">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Detection Feed
-              </span>
-              {plates.length > 0 && (
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Detection Feed</span>
+              {uniquePlates > 0 && (
                 <Link href="/journeys"
                   className="flex items-center gap-1 text-[10px] font-bold text-[#007AFF] hover:underline">
                   <Route size={10} />
@@ -289,67 +431,55 @@ function TestVideoPanel({ camera, onClose }: { camera: Camera; onClose: () => vo
               )}
             </div>
 
-            {status === 'error' && (
-              <div className="rounded-xl px-3 py-2 text-xs font-medium text-[#FF3B30]"
-                style={{ background: 'rgba(255,59,48,0.08)' }}>
-                {errorMsg}
+            {feedFrames.length === 0 && !active && (
+              <div className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed border-slate-100"
+                style={{ minHeight: 140 }}>
+                <p className="text-xs text-slate-300 font-medium text-center px-4">
+                  {file ? 'Press Start Loop to begin' : 'Load a video to get started'}
+                </p>
               </div>
             )}
 
-            {plates.length === 0 && !running && status === 'idle' && (
-              <div className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed border-slate-100">
-                <p className="text-xs text-slate-300 font-medium">Plates appear here as video is processed</p>
-              </div>
-            )}
-
-            {plates.length === 0 && running && (
+            {feedFrames.length === 0 && active && (
               <div className="flex-1 flex items-center justify-center gap-2 rounded-xl"
-                style={{ background: 'rgba(0,122,255,0.04)' }}>
+                style={{ background: 'rgba(0,122,255,0.04)', minHeight: 140 }}>
                 <div className="w-4 h-4 border-2 border-[#007AFF] border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs text-[#007AFF] font-medium">Scanning frames…</p>
+                <p className="text-xs font-medium" style={{ color: '#007AFF' }}>Scanning frames…</p>
               </div>
             )}
 
-            {plates.length > 0 && (
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1" style={{ maxHeight: 280 }}>
-                {plates.map(p => (
-                  <div key={p.text}
-                    className="flex items-center gap-3 rounded-xl px-3 py-2 animate-in fade-in slide-in-from-right-4 duration-300"
-                    style={{ background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                    {p.thumbnail ? (
-                      <img src={`data:image/jpeg;base64,${p.thumbnail}`} alt={p.text}
-                        className="w-16 h-9 object-contain rounded-lg flex-shrink-0"
-                        style={{ background: '#F2F2F7' }} />
-                    ) : (
-                      <div className="w-16 h-9 rounded-lg flex-shrink-0" style={{ background: '#F2F2F7' }} />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <span className="plate-badge text-[11px]">{p.text}</span>
+            {feedFrames.length > 0 && (
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1" style={{ maxHeight: 280 }}>
+                {feedFrames.flatMap((frame, fi) =>
+                  frame.plates.map((p: any, pi: number) => (
+                    <div key={`${fi}-${pi}`}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 animate-in fade-in duration-200"
+                      style={{ background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                      {p.thumbnail ? (
+                        <img src={`data:image/jpeg;base64,${p.thumbnail}`} alt={p.text}
+                          className="w-14 h-8 object-contain rounded-lg flex-shrink-0"
+                          style={{ background: '#F2F2F7' }} />
+                      ) : (
+                        <div className="w-14 h-8 rounded-lg flex-shrink-0" style={{ background: '#F2F2F7' }} />
+                      )}
+                      <span className="plate-badge text-[11px] flex-1 min-w-0">{p.text}</span>
+                      <span className="text-[10px] font-bold tabular-nums rounded-full px-2 py-0.5 flex-shrink-0"
+                        style={{
+                          color: p.confidence >= 0.9 ? '#30D158' : p.confidence >= 0.7 ? '#FF9500' : '#FF3B30',
+                          background: p.confidence >= 0.9 ? 'rgba(48,209,88,0.1)' : p.confidence >= 0.7 ? 'rgba(255,149,0,0.1)' : 'rgba(255,59,48,0.1)',
+                        }}>
+                        {Math.round(p.confidence * 100)}%
+                      </span>
                     </div>
-                    <span className="text-[10px] font-bold tabular-nums rounded-full px-2 py-0.5 flex-shrink-0"
-                      style={{
-                        color: p.confidence >= 0.9 ? '#30D158' : p.confidence >= 0.7 ? '#FF9500' : '#FF3B30',
-                        background: p.confidence >= 0.9 ? 'rgba(48,209,88,0.1)' : p.confidence >= 0.7 ? 'rgba(255,149,0,0.1)' : 'rgba(255,59,48,0.1)',
-                      }}>
-                      {Math.round(p.confidence * 100)}%
-                    </span>
-                    <span className="text-[9px] text-slate-300 font-mono flex-shrink-0">f{p.frameIndex}</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
 
-            {done && plates.length > 0 && (
+            {!active && uniquePlates > 0 && (
               <div className="rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-medium"
                 style={{ background: 'rgba(48,209,88,0.08)', color: '#248A3D' }}>
-                <span className="font-black">{plates.length}</span> unique plate{plates.length !== 1 ? 's' : ''} from {frames} frames — logged under <strong>{camera.name}</strong>
-              </div>
-            )}
-
-            {done && plates.length === 0 && status !== 'error' && (
-              <div className="rounded-xl px-3 py-2 text-xs text-slate-400 font-medium"
-                style={{ background: '#F2F2F7' }}>
-                No plates detected in {frames} frames
+                <span className="font-black">{uniquePlates}</span> unique plate{uniquePlates !== 1 ? 's' : ''} detected — logged under <strong>{camera.name}</strong>
               </div>
             )}
           </div>
@@ -369,7 +499,7 @@ export default function CamerasPage() {
   const [editCamera, setEditCamera] = useState<Camera | null>(null)
   const [form, setForm] = useState(blank)
   const [saving, setSaving] = useState(false)
-  const [testingId, setTestingId] = useState<string | null>(null)
+  const [testingIds, setTestingIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   function openAdd() { setForm(blank); setShowAdd(true) }
@@ -521,12 +651,16 @@ export default function CamerasPage() {
 
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setTestingId(testingId === camera.id ? null : camera.id)}
+                      onClick={() => setTestingIds(prev => {
+                        const next = new Set(prev)
+                        next.has(camera.id) ? next.delete(camera.id) : next.add(camera.id)
+                        return next
+                      })}
                       title="Test with video"
                       className="flex items-center gap-1.5 px-3 h-8 rounded-xl text-xs font-bold transition-all"
                       style={{
-                        background: testingId === camera.id ? '#007AFF' : 'rgba(0,122,255,0.08)',
-                        color: testingId === camera.id ? '#fff' : '#007AFF',
+                        background: testingIds.has(camera.id) ? '#007AFF' : 'rgba(0,122,255,0.08)',
+                        color: testingIds.has(camera.id) ? '#fff' : '#007AFF',
                       }}>
                       <FileVideo size={13} />
                       Test
@@ -547,8 +681,10 @@ export default function CamerasPage() {
                 </div>
 
                 {/* Test video panel — inline below the camera row */}
-                {testingId === camera.id && (
-                  <TestVideoPanel camera={camera} onClose={() => setTestingId(null)} />
+                {testingIds.has(camera.id) && (
+                  <TestVideoPanel camera={camera} onClose={() => setTestingIds(prev => {
+                    const next = new Set(prev); next.delete(camera.id); return next
+                  })} />
                 )}
               </div>
             ))}
