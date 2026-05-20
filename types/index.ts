@@ -122,6 +122,8 @@ export interface Alert {
   detectionEventId: string
   reason?: string
   thumbnailBase64?: string
+  personName?: string
+  personFaceThumbnail?: string
   acknowledged: boolean
   timestamp: string
 }

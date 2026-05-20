@@ -2,7 +2,8 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   experimental: {
-    proxyClientMaxBodySize: 50 * 1024 * 1024,
+    // Allow up to 2GB for test video uploads
+    proxyClientMaxBodySize: 2048 * 1024 * 1024,
   },
   async rewrites() {
     return [

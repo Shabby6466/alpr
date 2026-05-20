@@ -93,7 +93,7 @@ function makeCameraIcon(streaming: boolean, hasAlert: boolean) {
         position:relative;z-index:1;
         box-shadow:0 0 8px ${color}44;
       ">
-        <span style="font-size:8px;color:${color};font-family:monospace;font-weight:700;">${label}</span>
+        <span style="font-size:12px;color:${color};font-family:monospace;font-weight:700;">${label}</span>
       </div>
     </div>`,
   })
@@ -138,13 +138,13 @@ function PlateTrailLayer({ trail }: { trail: PlateTrailPoint[] }) {
         iconSize: [28, 28],
         iconAnchor: [14, 14],
         popupAnchor: [0, -18],
-        html: `<div style="width:28px;height:28px;background:#e8a000;border:2px solid #0a0c0e;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;font-weight:900;color:#0a0c0e;box-shadow:0 0 14px rgba(232,160,0,0.7);">${i + 1}</div>`,
+        html: `<div style="width:28px;height:28px;background:#e8a000;border:2px solid #0a0c0e;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;font-weight:900;color:#0a0c0e;box-shadow:0 0 14px rgba(232,160,0,0.7);">${i + 1}</div>`,
       })
       const m = L.marker([pt.lat, pt.lng], { icon }).bindPopup(
         `<div style="font-family:'IBM Plex Mono',monospace;min-width:140px">
-          <p style="color:#e8a000;font-weight:800;font-size:11px;margin:0 0 5px;text-transform:uppercase;letter-spacing:.06em">#${i + 1} · ${pt.cameraName}</p>
-          <p style="color:#c8d0d8;font-size:10px;margin:0 0 3px">${pt.count} sighting${pt.count !== 1 ? 's' : ''}</p>
-          <p style="color:#78899a;font-size:9px;margin:0">${new Date(pt.timestamp).toLocaleTimeString('en-PK', { hour12: false })} · ${new Date(pt.timestamp).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}</p>
+          <p style="color:#e8a000;font-weight:800;font-size:13px;margin:0 0 5px;text-transform:uppercase;letter-spacing:.06em">#${i + 1} · ${pt.cameraName}</p>
+          <p style="color:#c8d0d8;font-size:12px;margin:0 0 3px">${pt.count} sighting${pt.count !== 1 ? 's' : ''}</p>
+          <p style="color:#78899a;font-size:13px;margin:0">${new Date(pt.timestamp).toLocaleTimeString('en-PK', { hour12: false })} · ${new Date(pt.timestamp).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}</p>
         </div>`
       ).addTo(map)
       layers.push(m)
@@ -173,41 +173,29 @@ export default function OpsMap({ cameras, journeys, plateTrail = [], isLightMode
   useEffect(() => { injectStyles() }, [])
 
   const camerasWithGps = cameras.filter(c => c.lat != null && c.lng != null)
-  const allPoints: [number, number][] = camerasWithGps.map(c => [c.lat!, c.lng!])
-  journeys.forEach(j =>
-    (j.sightings ?? []).forEach(s => {
-      if (s.lat != null && s.lng != null) allPoints.push([s.lat, s.lng])
-    }),
-  )
-  const center: [number, number] = allPoints.length > 0
-    ? allPoints[Math.floor(allPoints.length / 2)]
-    : [33.6150, 73.0600]
+  const cameraPoints: [number, number][] = camerasWithGps.map(c => [c.lat!, c.lng!])
+  const center: [number, number] = cameraPoints.length > 0
+    ? cameraPoints[Math.floor(cameraPoints.length / 2)]
+    : [30.3753, 69.3451]
 
   return (
     <MapContainer
       center={center}
-      zoom={allPoints.length === 0 ? 12 : 13}
+      zoom={cameraPoints.length === 0 ? 6 : 13}
       style={{ width: '100%', height: '100%' }}
       zoomControl
       attributionControl={false}
     >
       <TileLayer
+        key={isLightMode ? 'light' : 'dark'}
         url={isLightMode 
           ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"}
         subdomains="abcd"
         maxZoom={20}
       />
-      {plateTrail.length === 0 && <FitAll points={allPoints} />}
+      {plateTrail.length === 0 && <FitAll points={cameraPoints} />}
       <PlateTrailLayer trail={plateTrail} />
-      {plateTrail.length === 0 && journeys.map((j, idx) => {
-        const pts = (j.sightings ?? [])
-          .filter(s => s.lat != null && s.lng != null)
-          .sort((a, b) => new Date(a.seenAt).getTime() - new Date(b.seenAt).getTime())
-          .map(s => [s.lat!, s.lng!] as [number, number])
-        if (pts.length < 2) return null
-        return <JourneyTrail key={j.id} points={pts} color={TRAIL_COLORS[idx % TRAIL_COLORS.length]} />
-      })}
       {camerasWithGps.map(cam => (
         <Marker key={cam.id} position={[cam.lat!, cam.lng!]} icon={makeCameraIcon(cam.streaming ?? false, false)}>
           <Popup minWidth={180}>
@@ -228,7 +216,7 @@ export default function OpsMap({ cameras, journeys, plateTrail = [], isLightMode
                 </span>
                 {cam.lat != null && (
                   <span style={{ fontSize: 9, color: '#3d4f5e' }}>
-                    {cam.lat.toFixed(3)}, {cam.lng!.toFixed(3)}
+                    {cam.lat.toFixed(6)}, {cam.lng!.toFixed(6)}
                   </span>
                 )}
               </div>

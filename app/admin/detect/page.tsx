@@ -451,7 +451,7 @@ function VideoDetector() {
       } finally {
         processingRef.current = false
       }
-    }, 'image/jpeg', JPEG_QUALITY)
+    }, 'image/png')
   }, [region])
 
   // ── RAF loop — capture gate + overlay drawing ─────────────────────────────
@@ -761,7 +761,7 @@ function VideoDetector() {
                         <img
                           src={`data:image/jpeg;base64,${f.thumbnail}`}
                           alt="face"
-                          className="w-full h-14 object-cover rounded"
+                          className="w-full h-auto max-h-24 object-contain rounded bg-slate-900/5"
                         />
                       )}
                     </div>

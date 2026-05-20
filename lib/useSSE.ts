@@ -16,6 +16,9 @@ export function useSSE<T>(url: string, onMessage: (data: T) => void) {
       es.addEventListener('alert', (e) => {
         try { onMessage(JSON.parse(e.data) as T) } catch {}
       })
+      es.addEventListener('face', (e) => {
+        try { onMessage(JSON.parse(e.data) as T) } catch {}
+      })
       es.onopen  = () => setConnected(true)
       es.onerror = () => {
         setConnected(false)

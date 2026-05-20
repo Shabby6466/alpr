@@ -97,22 +97,16 @@ export default function DashboardMap({
   useEffect(() => { injectStyles() }, [])
 
   const camerasWithGps = cameras.filter(c => c.lat != null && c.lng != null)
+  const cameraPoints: [number, number][] = camerasWithGps.map(c => [c.lat!, c.lng!])
 
-  const allPoints: [number, number][] = camerasWithGps.map(c => [c.lat!, c.lng!])
-  journeys.forEach(j =>
-    (j.sightings ?? []).forEach(s => {
-      if (s.lat != null && s.lng != null) allPoints.push([s.lat, s.lng])
-    }),
-  )
-
-  const center: [number, number] = allPoints.length > 0
-    ? allPoints[Math.floor(allPoints.length / 2)]
-    : [33.6844, 73.0479] // Islamabad default
+  const center: [number, number] = cameraPoints.length > 0
+    ? cameraPoints[Math.floor(cameraPoints.length / 2)]
+    : [30.3753, 69.3451]
 
   return (
     <MapContainer
       center={center}
-      zoom={allPoints.length === 0 ? 12 : 13}
+      zoom={cameraPoints.length === 0 ? 6 : 13}
       style={{ width: '100%', height: '100%' }}
       zoomControl={false}
       attributionControl={false}
@@ -123,7 +117,7 @@ export default function DashboardMap({
         maxZoom={20}
       />
 
-      <FitAll points={allPoints} />
+      <FitAll points={cameraPoints} />
 
       {journeys.map((j, idx) => {
         const pts = (j.sightings ?? [])
@@ -167,7 +161,7 @@ export default function DashboardMap({
                 </span>
                 {cam.lat != null && (
                   <span style={{ fontSize: 10, color: '#AEAEB2' }}>
-                    {cam.lat.toFixed(4)}, {cam.lng!.toFixed(4)}
+                    {cam.lat.toFixed(6)}, {cam.lng!.toFixed(6)}
                   </span>
                 )}
               </div>
