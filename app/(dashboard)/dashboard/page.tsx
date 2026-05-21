@@ -1747,7 +1747,6 @@ export default function OpsDashboard() {
 
               <div style={{ flexShrink: 0 }}>
                 <div className="ops-section-title">
-                  {led(cameras.length > 0 ? C.green : C.txt3, 'led-slow')}
                   ALPR CAMERAS
                   <span style={{ marginLeft: 'auto', fontSize: 12 }}>
                     <span style={{ color: C.green }}>{streamingCount} LIVE</span>
@@ -1872,7 +1871,6 @@ export default function OpsDashboard() {
 
               {/* Live face detections */}
               <div className="ops-section-title" style={{ flexShrink: 0 }}>
-                {led(C.green, 'led-slow')}
                 LIVE DETECTIONS
                 {liveFaceEvents.length > 0 && (
                   <span style={{ marginLeft: 'auto', fontSize: 7, color: C.green, fontWeight: 800, letterSpacing: '0.1em' }}>
